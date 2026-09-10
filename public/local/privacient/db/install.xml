@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/privacient/db" VERSION="20260910" COMMENT="Privacient console integration">
+  <TABLES>
+    <TABLE NAME="local_privacient_content" COMMENT="Content Hub items. The file itself lives in the local_privacient/content filearea, keyed by itemid = this row's id.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="tenantid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Owning console tenant; 0 = global library shared with every tenant"/>
+        <FIELD NAME="kind" TYPE="char" LENGTH="32" NOTNULL="true" DEFAULT="other" SEQUENCE="false" COMMENT="scorm|video|questionnaire|pdf|poster|wallpaper|other"/>
+        <FIELD NAME="title" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="tags" TYPE="char" LENGTH="500" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="filename" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="posterfilename" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Cover image shown on the card; stored in the poster filearea under the same itemid"/>
+        <FIELD NAME="mimetype" TYPE="char" LENGTH="128" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="filesize" TYPE="int" LENGTH="20" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Optional IOMAD course this item was published into"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Course module of the published activity"/>
+        <FIELD NAME="createdby" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="kind" UNIQUE="false" FIELDS="kind"/>
+        <INDEX NAME="tenantid" UNIQUE="false" FIELDS="tenantid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

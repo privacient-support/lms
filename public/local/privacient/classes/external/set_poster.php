@@ -47,9 +47,12 @@ class set_poster extends external_api {
         // Same ownership rule as delete: a tenant may not restyle the global
         // library or another tenant's material.
         if ((int) $tenantid >= 0 && (int) $record->tenantid !== (int) $tenantid) {
+            // $a carries the reason; null there renders a literal "{$a}".
             throw new \moodle_exception(
-                'nopermissions', 'error', '', null,
-                'That content belongs to a different library'
+                'nopermissions',
+                'error',
+                '',
+                'change a cover image belonging to a different library'
             );
         }
 

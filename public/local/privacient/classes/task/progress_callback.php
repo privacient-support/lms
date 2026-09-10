@@ -40,20 +40,37 @@ class progress_callback extends \core\task\adhoc_task {
         $timestamp = (string) time();
         $signature = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
 
-        $curl = new \curl();
+        // `ignoresecurity` is deliberate, and narrower than the alternative.
+        //
+        // Moodle's cURL helper blocks private address ranges to stop an
+        // attacker turning a user-supplied URL into a request against internal
+        // infrastructure. This URL is not user-supplied: it is a site
+        // administrator setting, and the console it points at normally *is* on
+        // a private address beside Moodle — so the check blocks the intended
+        // destination and nothing else.
+        //
+        // The alternative, allowing that range or port in
+        // `curlsecurityblockedhosts` / `curlsecurityallowedport`, would relax it
+        // for every other feature that fetches a URL, including ones that do
+        // take user input. Scoping the exception to this one admin-configured
+        // call is the smaller hole.
+        $curl = new \curl(['ignoresecurity' => true]);
         $curl->setHeader([
             'Content-Type: application/json',
             'X-Privacient-Timestamp: ' . $timestamp,
             'X-Privacient-Signature: sha256=' . $signature,
         ]);
-        $curl->post($url, $payload);
+        $response = $curl->post($url, $payload);
 
         $code = $curl->get_info()['http_code'] ?? 0;
         if ($code < 200 || $code >= 300) {
-            // Throwing makes Moodle retry with its own backoff.
+            // Throwing makes Moodle retry with its own backoff. The response
+            // body is included because "HTTP 0" alone sent the last diagnosis
+            // hunting the network when the real answer was in the error text.
+            $detail = $curl->error ?: substr((string) $response, 0, 200);
             throw new \moodle_exception(
                 'error', 'moodle', '', null,
-                "Progress callback failed with HTTP {$code}"
+                "Progress callback to {$url} failed with HTTP {$code}: {$detail}"
             );
         }
     }

@@ -40,9 +40,15 @@ class delete_content extends external_api {
         // Ownership check, so a tenant cannot delete the global library or
         // another tenant's material even if it learns the id.
         if ((int) $tenantid >= 0 && (int) $record->tenantid !== (int) $tenantid) {
+            // The reason goes in $a, not in debuginfo. Passing null there
+            // rendered the raw "{$a}" placeholder to the user and buried the
+            // real cause in debuginfo, which is hidden unless debugging is on —
+            // so a scope mismatch read as an unexplained permissions failure.
             throw new \moodle_exception(
-                'nopermissions', 'error', '', null,
-                'That content belongs to a different library'
+                'nopermissions',
+                'error',
+                '',
+                'delete content belonging to a different library'
             );
         }
 

@@ -11,3 +11,5 @@ $string['watchcomplete'] = 'Completed. Thanks for watching the full video.';
 $string['watchfailed'] = 'We could not record your completion. Please finish the video, or reload the page and try again.';
 $string['backtocourse'] = 'Back to the course';
 $string['backtotraining'] = 'Back to my training';
+// Shown in the browser tab; keep in step with the portal's title template.
+$string['portaltitle'] = 'Security Training';

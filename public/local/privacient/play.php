@@ -59,17 +59,76 @@ $PAGE->set_cm($cm, $course);
 // player, so showing Moodle's would be showing them a system they never signed
 // in to and cannot use.
 $PAGE->set_pagelayout('embedded');
-$PAGE->set_title(format_string($cm->name));
+// `false` suppresses Moodle's " | <site shortname>" suffix. Learners arrive
+// from the portal, whose tabs read "<page> - Security Training"; a tab that
+// suddenly named a different system would read as having left the product.
+$PAGE->set_title(
+    format_string($cm->name) . ' - ' . get_string('portaltitle', 'local_privacient'),
+    false
+);
 $PAGE->set_heading(format_string($course->fullname));
 
+// Drop Moodle's activity header. It is not merely redundant with the title
+// below it — it also renders the manual completion toggle, and that button
+// marks the module done on a single click, without watching anything. Leaving
+// it on this page would hand every learner a one-click bypass of the very
+// thing the player exists to measure.
+$PAGE->activityheader->disable();
+
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($cm->name));
+
+// The 'embedded' layout deliberately drops Moodle's navigation, and with it the
+// theme's container and grid rules — so this page must bring its own. Styling
+// it here rather than leaning on the theme also keeps it looking like the
+// portal the learner came from, instead of like Moodle with the chrome removed.
+echo <<<'CSS'
+<style>
+  body, #page, #region-main { background: #f4f7fb; }
+  .pv-wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px 56px;
+    text-align: center;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .pv-title { font-size: 1.75rem; line-height: 1.25; font-weight: 600; color: #18181b; margin: 0 0 8px; }
+  .pv-intro { color: #52525b; font-size: .95rem; margin: 0 auto 28px; max-width: 620px; }
+  .pv-video {
+    background: #000; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(24, 24, 27, .18);
+  }
+  .pv-video video { display: block; width: 100%; height: auto; }
+  .pv-status {
+    margin: 20px auto 0; max-width: 620px; padding: 12px 16px;
+    border-radius: 10px; font-size: .92rem;
+  }
+  .pv-status.is-progress { background: #e6f4fe; color: #14506e; }
+  .pv-status.is-done { background: #e7f7ee; color: #14532d; }
+  .pv-status.is-failed { background: #fef3c7; color: #78350f; }
+  .pv-back {
+    display: inline-block; margin-top: 28px; padding: 10px 18px;
+    border: 1px solid #d4d4d8; border-radius: 10px; background: #fff;
+    color: #3f3f46; font-size: .9rem; font-weight: 500; text-decoration: none;
+  }
+  .pv-back:hover { background: #f4f4f5; color: #18181b; text-decoration: none; }
+  @media (max-width: 600px) {
+    .pv-wrap { padding: 24px 14px 40px; }
+    .pv-title { font-size: 1.4rem; }
+  }
+</style>
+CSS;
+
+echo html_writer::start_div('pv-wrap');
+echo html_writer::tag('h1', format_string($cm->name), ['class' => 'pv-title']);
 
 if (trim(strip_tags($resource->intro)) !== '') {
-    echo $OUTPUT->box(format_module_intro('resource', $resource, $cm->id), 'generalbox');
+    echo html_writer::div(
+        format_module_intro('resource', $resource, $cm->id),
+        'pv-intro'
+    );
 }
 
-echo html_writer::start_div('local-privacient-player');
+echo html_writer::start_div('pv-video');
 echo html_writer::empty_tag('video', [
     'id' => 'privacient-player',
     'src' => $fileurl->out(false),
@@ -77,34 +136,32 @@ echo html_writer::empty_tag('video', [
     'controlsList' => 'nodownload',
     'preload' => 'metadata',
     'playsinline' => 'playsinline',
-    'style' => 'width:100%;max-width:900px;background:#000;',
     'data-cmid' => $cm->id,
     'data-threshold' => $threshold,
     'data-sesskey' => sesskey(),
     'data-endpoint' => (new moodle_url('/local/privacient/progress.php'))->out(false),
     'data-done' => $alreadydone ? 1 : 0,
 ]);
+echo html_writer::end_div();
 
 echo html_writer::div(
     $alreadydone
         ? get_string('watchcomplete', 'local_privacient')
         : get_string('watchprogress', 'local_privacient', '0'),
-    'alert ' . ($alreadydone ? 'alert-success' : 'alert-info') . ' mt-3',
+    'pv-status ' . ($alreadydone ? 'is-done' : 'is-progress'),
     ['id' => 'privacient-status', 'role' => 'status', 'aria-live' => 'polite']
 );
-echo html_writer::end_div();
 
 // Back to the portal, not to Moodle's course page: the course page is exactly
 // the Moodle surface this whole flow exists to keep learners out of.
 $portal = trim((string) get_config('local_privacient', 'portalurl'));
-echo html_writer::div(
-    html_writer::link(
-        $portal !== '' ? $portal : (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false),
-        get_string('backtotraining', 'local_privacient'),
-        ['class' => 'btn btn-secondary']
-    ),
-    'mt-3'
+echo html_writer::link(
+    $portal !== '' ? $portal : (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false),
+    get_string('backtotraining', 'local_privacient'),
+    ['class' => 'pv-back']
 );
+
+echo html_writer::end_div();
 
 // Strings the inline module needs, resolved server-side.
 $PAGE->requires->strings_for_js(['watchprogress', 'watchcomplete', 'watchfailed'], 'local_privacient');
@@ -152,7 +209,7 @@ require(['core/str'], function(str) {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var key = data && data.complete ? 'watchcomplete' : 'watchfailed';
-                status.className = 'alert ' + (data && data.complete ? 'alert-success' : 'alert-warning') + ' mt-3';
+                status.className = 'pv-status ' + (data && data.complete ? 'is-done' : 'is-failed');
                 return str.get_string(key, 'local_privacient').done(function(s) {
                     status.textContent = s;
                 });

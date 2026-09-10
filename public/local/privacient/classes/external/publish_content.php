@@ -23,17 +23,24 @@ class publish_content extends external_api {
         return new external_function_parameters([
             'id' => new external_value(PARAM_INT, 'Content item id'),
             'courseid' => new external_value(PARAM_INT, 'Existing course, or 0 to create one', VALUE_DEFAULT, 0),
+            'forcenew' => new external_value(
+                PARAM_BOOL,
+                'Always build a new course, even if this item was published before',
+                VALUE_DEFAULT,
+                0
+            ),
         ]);
     }
 
-    public static function execute($id, $courseid = 0): array {
+    public static function execute($id, $courseid = 0, $forcenew = false): array {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/course/lib.php');
         require_once($CFG->dirroot . '/course/modlib.php');
 
-        ['id' => $id, 'courseid' => $courseid] = self::validate_parameters(
-            self::execute_parameters(), ['id' => $id, 'courseid' => $courseid]
-        );
+        ['id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew] =
+            self::validate_parameters(self::execute_parameters(), [
+                'id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew,
+            ]);
 
         $context = context_system::instance();
         self::validate_context($context);
@@ -49,7 +56,13 @@ class publish_content extends external_api {
 
         // Already published and still present: hand back what exists rather
         // than creating a duplicate activity every time this is called.
-        if (!empty($record->courseid) && !empty($record->cmid)
+        //
+        // `forcenew` overrides that, because SCORM attempts, the resume
+        // bookmark and Moodle's completion record all key on (activity, user).
+        // Sharing one activity across campaigns therefore carries last
+        // campaign's progress into the next one — and, because completion never
+        // changes state, the second campaign can never complete at all.
+        if (!$forcenew && !empty($record->courseid) && !empty($record->cmid)
             && $DB->record_exists('course_modules', ['id' => $record->cmid])) {
             return [
                 'courseid' => (int) $record->courseid,
@@ -60,7 +73,7 @@ class publish_content extends external_api {
 
         // Reuse the course from a previous partial run rather than leaving a
         // fresh one behind on every retry.
-        if (!$courseid && !empty($record->courseid)
+        if (!$forcenew && !$courseid && !empty($record->courseid)
             && $DB->record_exists('course', ['id' => $record->courseid])) {
             $courseid = (int) $record->courseid;
         }
@@ -114,6 +127,14 @@ class publish_content extends external_api {
             $moduleinfo->completion = COMPLETION_TRACKING_AUTOMATIC;
             $moduleinfo->completionview = COMPLETION_VIEW_NOT_REQUIRED;
             $moduleinfo->completionstatusrequired = 4; // 'completed'
+            // Go straight into the player rather than showing Moodle's course
+            // structure page first. That page is Moodle chrome the learner has
+            // no use for, and an extra click between them and the training.
+            $moduleinfo->skipview = 2; // SCORM_SKIPVIEW_ALWAYS
+            // Moodle renders its own table of contents as a side panel, but a
+            // SCORM package ships its own menu — so the learner gets two navs,
+            // and Moodle's squeezes the real content into a narrow column.
+            $moduleinfo->hidetoc = 1; // SCORM_TOC_HIDDEN
         } else {
             // A video is a file resource, embedded so it plays in the page.
             $moduleinfo->modulename = 'resource';

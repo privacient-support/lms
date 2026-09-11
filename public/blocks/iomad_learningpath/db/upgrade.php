@@ -87,8 +87,8 @@ function xmldb_block_iomad_learningpath_upgrade($oldversion) {
         // Update all of the capabilities for local/iomad_learningpaths to block/iomad_learningpaths.
         foreach ($capabilites as $old => $new) {
             $DB->set_field('role_capabilities', 'capability', $new, ['capability' => $old]);
-            $DB->set_field('company_role_restriction', 'capability', $new, ['capability' => $old]);
-            $DB->set_field('company_role_templates_caps', 'capability', $new, ['capability' => $old]);
+            $DB->set_field('local_iomad_company_role_restrictions', 'capability', $new, ['capability' => $old]);
+            $DB->set_field('local_iomad_company_role_templates_caps', 'capability', $new, ['capability' => $old]);
         }
 
         mtrace("");

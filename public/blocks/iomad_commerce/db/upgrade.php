@@ -147,7 +147,7 @@ function xmldb_block_iomad_commerce_upgrade($oldversion) {
                     // Deal with all of the companies which could see this product.
                     if (!$ignore) {
                         foreach ($potentialcompanies as $company) {
-                            if ($DB->get_record('company_course', ['companyid' => $company->id, 'courseid' => $course->id]) ||
+                            if ($DB->get_record('local_iomad_company_courses', ['companyid' => $company->id, 'courseid' => $course->id]) ||
                                 $DB->get_record('iomad_courses', ['courseid' => $course->id, 'shared' => 1])) {
                                 $companyitem = clone($shopitem);
                                 unset($companyitem->id);

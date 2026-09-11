@@ -1,0 +1,32 @@
+services:
+  web:
+    container_name: lms
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lms:latest
+    ports:
+      - "${MOODLE_HTTP_PORT:-8080}:80"
+    environment:
+      MOODLE_DATABASE_HOST: ${MOODLE_DATABASE_HOST}
+      MOODLE_DATABASE_PORT: ${MOODLE_DATABASE_PORT:-3306}
+      MOODLE_DATABASE_NAME: ${MOODLE_DATABASE_NAME}
+      MOODLE_DATABASE_USER: ${MOODLE_DATABASE_USER}
+      MOODLE_DATABASE_PASSWORD: ${MOODLE_DATABASE_PASSWORD}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT}
+      MOODLE_DATAROOT: /var/moodledata
+    volumes:
+      - lms_moodledata:/var/moodledata
+      - ./docker/apache-lms.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./public/local/privacient:/var/www/html/public/local/privacient:ro
+    networks:
+      - default
+      - backend
+    restart: unless-stopped
+
+networks:
+  backend:
+    external: true
+
+volumes:
+  lms_moodledata:

@@ -51,6 +51,18 @@ if (!$completion->is_enabled($cm)) {
     $respond(false, 'completion-disabled');
 }
 
+// How long this learner was in the player, recorded before completion so the
+// observer that fires on the next line can already read it. A video reports no
+// time of its own, and elapsed-since-enrolment would call a five-minute clip a
+// fortnight's work.
+if ($started) {
+    set_user_preference(
+        'local_privacient_watchtime_' . $cm->id,
+        max(0, time() - $started),
+        $USER->id
+    );
+}
+
 $completion->update_state($cm, COMPLETION_COMPLETE, $USER->id);
 
 // Mirrors what mod_resource would log, so reports and the IOMAD activity trail

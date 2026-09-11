@@ -23,4 +23,21 @@ $observers = [
         'eventname' => '\core\event\course_completed',
         'callback' => '\local_privacient\observer::course_completed',
     ],
+    [
+        // A learner opened a questionnaire paper.
+        'eventname' => '\mod_quiz\event\attempt_started',
+        'callback' => '\local_privacient\observer::quiz_attempt_started',
+    ],
+    [
+        // A paper has been marked. Not attempt_submitted: that fires before
+        // mod_quiz grades the attempt, so the gradebook still holds the
+        // previous attempt's mark — or nothing at all on a first sitting.
+        //
+        // Completion alone cannot carry this. A quiz with a pass mark stays
+        // incomplete when a learner fails, so Moodle writes no completion row
+        // and fires no completion event, and a learner who had sat the paper
+        // twice was indistinguishable from one who had never opened it.
+        'eventname' => '\mod_quiz\event\attempt_graded',
+        'callback' => '\local_privacient\observer::quiz_attempt_graded',
+    ],
 ];

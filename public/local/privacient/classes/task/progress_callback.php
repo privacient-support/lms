@@ -34,6 +34,9 @@ class progress_callback extends \core\task\adhoc_task {
             'courseid' => (int) $data['courseid'],
             'status' => $data['status'],
             'score' => $data['score'],
+            'seconds' => isset($data['seconds']) && $data['seconds'] !== null
+                ? (int) $data['seconds']
+                : null,
             'occurred' => (int) $data['occurred'],
         ]);
 

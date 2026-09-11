@@ -30,6 +30,13 @@ $functions = [
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',
     ],
+    'local_privacient_publish_questionnaire' => [
+        'classname'   => 'local_privacient\\external\\publish_questionnaire',
+        'description' => 'Generate a Moodle quiz from a questionnaire definition.',
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
     'local_privacient_enrol_learner' => [
         'classname'   => 'local_privacient\\external\\enrol_learner',
         'description' => 'Ensure a learner exists, enrol them, and mint a launch key.',

@@ -59,6 +59,12 @@ if ($courseid) {
         // Our own player: it is what measures the watch and reports it to
         // progress.php.
         $target = new moodle_url('/local/privacient/play.php', ['cmid' => $item->cmid]);
+    } else if ($cmexists && $item->modname === 'quiz') {
+        // A generated questionnaire. Our own landing page rather than
+        // mod_quiz's view.php, which is a Moodle page down to its layout, and
+        // rather than the course page, which is IOMAD's. Sitting the paper is
+        // still mod_quiz's job; only the way in belongs to us.
+        $target = new moodle_url('/local/privacient/quiz.php', ['cmid' => $item->cmid]);
     } else if ($cmexists && $item->modname === 'scorm') {
         // mod_scorm's own entry point, which with skipview set drops the
         // learner straight into player.php — itself an 'embedded' page, so it

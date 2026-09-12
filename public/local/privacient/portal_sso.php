@@ -63,6 +63,39 @@ if (!isloggedin() || isguestuser()) {
     ]));
 }
 
+// The person who signed in must belong to the company whose IdP signed them in.
+//
+// `auth_iomadsaml2` matches an assertion to a Moodle account by username across
+// the whole site — its lookup has no company filter. So a customer who controls
+// their own identity provider can assert another customer's learner and IOMAD
+// will happily authenticate them, handing over that learner's courses, grades
+// and certificates. Nothing upstream stops it, so this does.
+//
+// Checked against the company that owns the IdP which actually authenticated
+// this session, falling back to the requested one. Both are safe to compare
+// against: reaching here through a company means passing that company's IdP,
+// which an outsider cannot do.
+// The session stores md5(entityid); match on that.
+$expectedcompany = $companyid;
+if (!empty($SESSION->iomadsaml2idp)) {
+    foreach ($DB->get_records('auth_iomadsaml2_idps', ['activeidp' => 1], '', 'id, entityid, companyid') as $row) {
+        if (md5($row->entityid) === $SESSION->iomadsaml2idp) {
+            $expectedcompany = (int) $row->companyid;
+            break;
+        }
+    }
+}
+
+if ($expectedcompany > 0
+    && !$DB->record_exists('local_iomad_company_users',
+        ['userid' => $USER->id, 'companyid' => $expectedcompany])) {
+    require_logout();
+    throw new moodle_exception(
+        'invalidarguments', 'error', '', null,
+        'That account does not belong to the organisation that signed you in'
+    );
+}
+
 $payload = json_encode([
     'email' => \core_text::strtolower(trim((string) $USER->email)),
     'firstname' => (string) $USER->firstname,

@@ -40,4 +40,11 @@ $observers = [
         'eventname' => '\mod_quiz\event\attempt_graded',
         'callback' => '\local_privacient\observer::quiz_attempt_graded',
     ],
+    [
+        // Refuse a SAML sign-in whose account belongs to a different company.
+        // IOMAD's own SAML lookup matches usernames site-wide, so without this
+        // one customer's identity provider can authenticate another's learner.
+        'eventname' => '\core\event\user_loggedin',
+        'callback' => '\local_privacient\observer::user_loggedin',
+    ],
 ];

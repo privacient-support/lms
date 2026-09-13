@@ -44,6 +44,13 @@ $functions = [
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',
     ],
+    'local_privacient_ensure_learner' => [
+        'classname'   => 'local_privacient\\external\\ensure_learner',
+        'description' => 'Create a Moodle user for a console team member and attach them to the IOMAD company.',
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
     'local_privacient_set_poster' => [
         'classname'   => 'local_privacient\\external\\set_poster',
         'description' => 'Attach or remove a Content Hub cover image.',

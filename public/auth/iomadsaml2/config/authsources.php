@@ -27,26 +27,28 @@ use local_iomad\iomad;
 
 defined('MOODLE_INTERNAL') || die();
 
-global $iomadsaml2auth, $CFG, $SITE, $SESSION;
+global $iomadsaml2auth, $CFG, $SITE, $SESSION, $DB;
 
 $config = [];
 
 $baseurl = optional_param('baseurl', $CFG->wwwroot, PARAM_URL);
 
+$idpentityid = null;
 if (!empty($SESSION->iomadsaml2idp) && array_key_exists($SESSION->iomadsaml2idp, $iomadsaml2auth->metadataentities)) {
     $idpentityid = $iomadsaml2auth->metadataentities[$SESSION->iomadsaml2idp]->entityid;
-} else {
+} else if (!empty($iomadsaml2auth->metadataentities)) {
     // Case for specifying no $SESSION IdP, select the first configured IdP as the default.
     $idpentityid = reset($iomadsaml2auth->metadataentities)->entityid;
 }
 
 $defaultspentityid = "$baseurl/auth/iomadsaml2/sp/metadata.php";
+$spurls = null;
 
 // Process requested attributes.
 $attributes = [];
 $attributesrequired = [];
 
-foreach (explode(PHP_EOL, $iomadsaml2auth->config->requestedattributes) as $attr) {
+foreach (explode(PHP_EOL, $iomadsaml2auth->config->requestedattributes ?? "") as $attr) {
     $attr = trim($attr);
     if (empty($attr)) {
         continue;
@@ -68,6 +70,18 @@ if ($companyid > 0) {
     $postfix = "";
 }
 
+$orgname = $SITE->shortname;
+$orgdisplay = $SITE->fullname;
+if ($companyid > 0 && class_exists(\local_privacient\saml_sp::class)) {
+    $spurls = \local_privacient\saml_sp::urls((int) $companyid);
+    $defaultspentityid = $spurls['entityid'];
+    $company = $DB->get_record('local_iomad_companies', ['id' => $companyid], 'name,shortname');
+    if ($company) {
+        $orgname = $company->shortname;
+        $orgdisplay = $company->name;
+    }
+}
+
 $config[$iomadsaml2auth->spname] = [
     'saml:SP',
     'entityID' => !empty($iomadsaml2auth->config->spentityid) ? $iomadsaml2auth->config->spentityid : $defaultspentityid,
@@ -75,16 +89,22 @@ $config[$iomadsaml2auth->spname] = [
     'idp' => empty($CFG->auth_iomadsaml2_disco_url) ? $idpentityid : null,
     'NameIDPolicy' => ['Format' => $iomadsaml2auth->config->nameidpolicy, 'AllowCreate' => true],
     'OrganizationName' => array(
-        $lang => $SITE->shortname,
+        $lang => $orgname,
     ),
     'OrganizationDisplayName' => array(
-        $lang => $SITE->fullname,
+        $lang => $orgdisplay,
     ),
     'OrganizationURL' => array(
         $lang => $baseurl,
     ),
     'privatekey' => $iomadsaml2auth->spname . '.pem',
-    'privatekey_pass' => get_config('auth_iomadsaml2', 'privatekeypass' . $postfix),
+    'privatekey_pass' => (static function() use ($postfix) {
+        $pass = get_config('auth_iomadsaml2', 'privatekeypass' . $postfix);
+        if ($pass === false) {
+            $pass = get_config('auth_iomadsaml2', 'privatekeypass');
+        }
+        return is_string($pass) ? $pass : null;
+    })(),
     'certificate' => $iomadsaml2auth->spname . '.crt',
     'sign.logout' => true,
     'redirect.sign' => true,
@@ -97,6 +117,18 @@ $config[$iomadsaml2auth->spname] = [
     'attributes' => $attributes,
     'attributes.required' => $attributesrequired,
 ];
+
+if (is_array($spurls)) {
+    $config[$iomadsaml2auth->spname]['AssertionConsumerService'] = [[
+        'index' => 0,
+        'Binding' => \SAML2\Constants::BINDING_HTTP_POST,
+        'Location' => $spurls['acsurl'],
+    ]];
+    $config[$iomadsaml2auth->spname]['SingleLogoutServiceLocation'] = $spurls['slsurl'];
+    $config[$iomadsaml2auth->spname]['SingleLogoutServiceBinding'] = [
+        \SAML2\Constants::BINDING_HTTP_REDIRECT,
+    ];
+}
 
 if (!empty($iomadsaml2auth->config->assertionsconsumerservices)) {
     $config[$iomadsaml2auth->spname]['acs.Bindings'] = explode(',', $iomadsaml2auth->config->assertionsconsumerservices);

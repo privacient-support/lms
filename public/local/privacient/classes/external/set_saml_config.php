@@ -51,12 +51,26 @@ class set_saml_config extends external_api {
             throw new \moodle_exception('invalidarguments', 'error', '', null, 'Unknown company');
         }
 
+        \local_privacient\saml_sp::ensure_entity_id((int) $companyid);
+        \local_privacient\saml_sp::allow_roster_sso((int) $companyid);
+
         $metadata = trim($metadata);
         if ($metadata === '') {
             throw new \moodle_exception(
                 'invalidarguments', 'error', '', null,
                 'Provide the identity provider metadata URL or XML'
             );
+        }
+
+        // auth_iomadsaml2 looks up privatekeypass_{companyid} and passes the
+        // result straight to SimpleSAMLphp. get_config() returns boolean false
+        // when that key is missing, which SSP rejects ("not a valid string
+        // value or null") and SSO dies before the IdP is contacted. The SP
+        // certificate is site-wide, so copy the site passphrase when the
+        // company does not have its own.
+        $sitepass = get_config('auth_iomadsaml2', 'privatekeypass');
+        if (is_string($sitepass) && get_config('auth_iomadsaml2', "privatekeypass_{$companyid}") === false) {
+            set_config("privatekeypass_{$companyid}", $sitepass, 'auth_iomadsaml2');
         }
 
         // The company postfix is how auth_iomadsaml2 keeps tenants apart.

@@ -10,7 +10,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_privacient';
-$plugin->version   = 2026091027;
+$plugin->version   = 2026091033;
 $plugin->requires  = 2025100600;   // Moodle 5.1
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.17.0';
+$plugin->release   = '1.20.1';

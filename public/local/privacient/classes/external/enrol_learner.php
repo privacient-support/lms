@@ -48,42 +48,7 @@ class enrol_learner extends external_api {
         require_capability('local/privacient:managecontent', $context);
 
         $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
-        $email = \core_text::strtolower(trim($email));
-
-        $user = $DB->get_record('user', [
-            'email' => $email,
-            'mnethostid' => $CFG->mnet_localhost_id,
-            'deleted' => 0,
-        ]);
-
-        if (!$user) {
-            $new = new \stdClass();
-            $new->username = $email;
-            $new->email = $email;
-            $new->firstname = $firstname !== '' ? $firstname : explode('@', $email)[0];
-            $new->lastname = $lastname !== '' ? $lastname : ' ';
-            $new->auth = 'manual';
-            $new->confirmed = 1;
-            $new->mnethostid = $CFG->mnet_localhost_id;
-            // Never used: sign-in happens through the launch key.
-            $new->password = hash_internal_user_password(random_string(40));
-            $userid = user_create_user($new, false, false);
-            $user = $DB->get_record('user', ['id' => $userid], '*', MUST_EXIST);
-        }
-
-        // Attach to the IOMAD company so its reporting sees this learner.
-        if ($companyid && $DB->record_exists('local_iomad_companies', ['id' => $companyid])
-            && !$DB->record_exists('local_iomad_company_users', [
-                'companyid' => $companyid, 'userid' => $user->id,
-            ])) {
-            $DB->insert_record('local_iomad_company_users', (object) [
-                'companyid' => $companyid,
-                'userid' => $user->id,
-                'managertype' => 0,
-                'departmentid' => 0,
-                'suspended' => 0,
-            ]);
-        }
+        $user = \local_privacient\learner::ensure($email, $firstname, $lastname, (int) $companyid);
 
         $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
         enrol_try_internal_enrol($course->id, $user->id, $studentrole->id);

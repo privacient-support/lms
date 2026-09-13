@@ -127,6 +127,11 @@ class auth extends \auth_plugin_base {
         global $CFG, $DB;
 
         // IOMAD
+        // Company-scoped SP endpoints put the id on the URL (PATH_INFO) before
+        // a session exists. Honour that so ACS/metadata are not site-wide.
+        if (class_exists(\local_privacient\saml_sp::class)) {
+            \local_privacient\saml_sp::bind_from_request();
+        }
         $companyid = iomad::get_my_companyid(\context_system::instance(), false);
         $postfix = '';
         if ($companyid > 0) {
@@ -151,11 +156,14 @@ class auth extends \auth_plugin_base {
 
         $fullconfig = (array) get_config('auth_iomadsaml2');
         $myconfig = array_merge($this->defaults, $fullconfig );
-        // Do we have anything company specific?
-        if (!empty($companyid)) {
-            foreach ($this->defaults as $defaultidetifier => $ignore) {
-                if (!empty($fullconfig[$defaultidetifier . $postfix])) {
-                    $myconfig[$defaultidetifier] = $fullconfig[$defaultidetifier . $postfix];
+        // Company settings use a `_{id}` postfix. Merge every matching key,
+        // not just those in $defaults — otherwise spentityid_{id} (the
+        // per-company entity ID) is ignored and every tenant looks the same.
+        if ($companyid > 0) {
+            $slen = strlen($postfix);
+            foreach ($fullconfig as $key => $value) {
+                if ($slen && substr($key, -$slen) === $postfix) {
+                    $myconfig[substr($key, 0, -$slen)] = $value;
                 }
             }
         }
@@ -168,7 +176,14 @@ class auth extends \auth_plugin_base {
         $this->metadatalist = $parser->parse($this->config->idpmetadata);
 
         // Fetch active entitiyIDs provided by the metadata and populate metadataentities list.
-        $idpentities = $DB->get_records('auth_iomadsaml2_idps', ['activeidp' => 1, 'companyid' => $companyid]);
+        // The ACS is a cross-site POST from the IdP, so there is often no
+        // company in session. Load every active IdP in that case so the
+        // assertion Issuer can still be resolved.
+        if ($companyid > 0) {
+            $idpentities = $DB->get_records('auth_iomadsaml2_idps', ['activeidp' => 1, 'companyid' => $companyid]);
+        } else {
+            $idpentities = $DB->get_records('auth_iomadsaml2_idps', ['activeidp' => 1]);
+        }
         foreach ($idpentities as $idpentity) {
             // Set name.
             $idpentity->name = empty($idpentity->displayname) ? $idpentity->defaultname : $idpentity->displayname;
@@ -224,7 +239,9 @@ class auth extends \auth_plugin_base {
      * @return string
      */
     public function get_file_sp_metadata_file() {
-        return $this->get_file($this->spname . '.xml');
+        // Include the company postfix so one tenant cannot be served another's
+        // cached EntityDescriptor.
+        return $this->get_file($this->spname . $this->postfix . '.xml');
     }
 
     /**
@@ -245,14 +262,21 @@ class auth extends \auth_plugin_base {
 
         // IOMAD
         // Check for file with postfix first (when company is selected).
-        if (!empty($this->postfix) && file_exists($this->get_saml2_directory() . '/' . md5($url) . $this->postfix . '.idp.xml')) {
-            $filename = md5($url) . $this->postfix . '.idp.xml';
-        } else if (file_exists($this->get_saml2_directory() . '/' . md5($url) . '.idp.xml')) {
+        $dir = $this->get_saml2_directory();
+        $hash = md5($url);
+        if (!empty($this->postfix) && file_exists($dir . '/' . $hash . $this->postfix . '.idp.xml')) {
+            $filename = $hash . $this->postfix . '.idp.xml';
+        } else if (file_exists($dir . '/' . $hash . '.idp.xml')) {
             // Fall back to file without postfix - if it exists.
-            $filename = md5($url) . '.idp.xml';
+            $filename = $hash . '.idp.xml';
         } else {
-            // If neither exists, use the appropriate filename for creation.
-            $filename = md5($url) . $this->postfix . '.idp.xml';
+            $matches = glob($dir . '/' . $hash . '_*.idp.xml') ?: [];
+            if ($matches) {
+                $filename = basename(end($matches));
+            } else {
+                // If neither exists, use the appropriate filename for creation.
+                $filename = $hash . $this->postfix . '.idp.xml';
+            }
         }
 
         return $this->get_file($filename);
@@ -420,6 +444,12 @@ class auth extends \auth_plugin_base {
      */
     public function error_page($msg) {
         global $PAGE, $OUTPUT, $SESSION;
+
+        // A sign-in that began at the Privacient portal goes back there rather
+        // than stranding a learner on a Moodle page they cannot act on.
+        if (class_exists(\local_privacient\saml_sp::class)) {
+            \local_privacient\saml_sp::fail_to_portal((string) $msg);
+        }
 
         // Clean up $SESSION->wantsurl that was set explicitly in {@see auth_iomadsaml2\login},
         // we don't go anywhere.
@@ -709,6 +739,7 @@ class auth extends \auth_plugin_base {
         if ($this->config->attrsimple) {
             $attributes = $this->simplify_attr($attributes);
         }
+        $attributes = $this->normalize_identity_attributes($attributes);
 
         $attr = $this->config->idpattr;
         if (empty($attributes[$attr])) {
@@ -748,6 +779,17 @@ class auth extends \auth_plugin_base {
             if ($user = user_extractor::get_user($this->config->mdlattr, $uid, $insensitive, $accentsensitive)) {
                 // We found a user.
                 break;
+            }
+            // Learners are keyed by email in the portal; Azure may assert
+            // that address against username or email depending on how the
+            // Moodle account was created.
+            foreach (['email', 'username'] as $fallbackfield) {
+                if ($fallbackfield === $this->config->mdlattr) {
+                    continue;
+                }
+                if ($user = user_extractor::get_user($fallbackfield, $uid, $insensitive, $accentsensitive)) {
+                    break 2;
+                }
             }
         }
 
@@ -1010,6 +1052,62 @@ class auth extends \auth_plugin_base {
      *
      * @param array $attributes A list of attributes from the request
      */
+    /**
+     * Copy Azure-style claims onto the names this plugin expects.
+     *
+     * Entra ID default Attributes & Claims send emailaddress / givenname /
+     * surname, or only a NameID. The plugin default idpattr is uid, which
+     * Azure does not emit unless the customer adds a custom claim.
+     */
+    public function normalize_identity_attributes(array $attributes): array {
+        $emailkeys = [
+            'uid', 'emailaddress', 'mail', 'email', 'upn', 'nameid',
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+            'http://schemas.xmlsoap.org/claims/EmailAddress',
+        ];
+        // Prefer a value that is actually an email address.
+        //
+        // Accounts are matched on email when mdlattr is 'email', and Entra ID
+        // returns an opaque transient NameID unless the AuthnRequest asks for
+        // an email one. Taken at face value that becomes a lookup for a user
+        // whose address is '7zr9jup9rnvt7lafp9kz6fedrewh2lzu5eov1iw7dz4=',
+        // which no account can ever satisfy, and the learner is told they have
+        // no account rather than that the assertion carried no address.
+        $email = null;
+        foreach ($emailkeys as $key) {
+            $value = $attributes[$key][0] ?? null;
+            if (is_string($value) && strpos($value, '@') !== false) {
+                $email = $attributes[$key];
+                break;
+            }
+        }
+        // An IdP that keys on an opaque id is legitimate when the account is
+        // matched on username or idnumber instead, so that case keeps the
+        // first non-empty value.
+        if ($email === null && (string) ($this->config->mdlattr ?? '') !== 'email') {
+            foreach ($emailkeys as $key) {
+                if (!empty($attributes[$key][0])) {
+                    $email = $attributes[$key];
+                    break;
+                }
+            }
+        }
+        if ($email) {
+            foreach (['uid', 'email', 'emailaddress', 'mail'] as $alias) {
+                if (empty($attributes[$alias])) {
+                    $attributes[$alias] = $email;
+                }
+            }
+        }
+        if (empty($attributes['firstname']) && !empty($attributes['givenname'])) {
+            $attributes['firstname'] = $attributes['givenname'];
+        }
+        if (empty($attributes['lastname']) && !empty($attributes['surname'])) {
+            $attributes['lastname'] = $attributes['surname'];
+        }
+        return $attributes;
+    }
+
     public function simplify_attr($attributes) {
 
         foreach ($attributes as $key => $val) {

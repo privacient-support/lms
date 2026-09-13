@@ -450,9 +450,15 @@ class SP extends \SimpleSAML\Auth\Source
 
         $ar = Module\saml\Message::buildAuthnRequest($this->metadata, $idpMetadata);
 
-         // auth_saml2 modification
-        $baseurl = \SimpleSAML\Module::getModuleURL('saml/sp/saml2-acs.php/' . $this->authId);
-        $baseurl = str_replace('module.php/saml/sp/', '', $baseurl);
+         // auth_saml2 modification. Prefer a configured ACS Location so a
+        // per-company URL in authsources is what the AuthnRequest advertises.
+        $acsEndpoints = $this->getACSEndpoints();
+        if (!empty($acsEndpoints[0]['Location'])) {
+            $baseurl = $acsEndpoints[0]['Location'];
+        } else {
+            $baseurl = \SimpleSAML\Module::getModuleURL('saml/sp/saml2-acs.php/' . $this->authId);
+            $baseurl = str_replace('module.php/saml/sp/', '', $baseurl);
+        }
         $ar->setAssertionConsumerServiceURL($baseurl);
 
         if (isset($state['\SimpleSAML\Auth\Source.ReturnURL'])) {

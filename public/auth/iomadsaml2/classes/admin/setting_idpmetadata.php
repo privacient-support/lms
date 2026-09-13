@@ -290,10 +290,17 @@ class setting_idpmetadata extends admin_setting_configtextarea {
      * @param string $xml
      */
     private function save_idp_metadata_xml($url, $xml) {
-        global $CFG, $iomadsaml2auth;
-        require_once("{$CFG->dirroot}/auth/iomadsaml2/setup.php");
+        global $CFG;
 
-        $file = $iomadsaml2auth->get_file_idp_metadata_file($url);
+        $dir = $CFG->dataroot . '/iomadsaml2';
+        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+            throw new \moodle_exception('errorcreatingdirectory', 'error', '', $dir);
+        }
+        // Write using this setting's company postfix, not the current user's.
+        // The console saves SAML over a site-wide token (no company in
+        // session); using $iomadsaml2auth here produced hash.idp.xml while
+        // login looks for hash_{companyid}.idp.xml.
+        $file = $dir . '/' . md5($url) . $this->postfix . '.idp.xml';
         file_put_contents($file, $xml);
     }
 }

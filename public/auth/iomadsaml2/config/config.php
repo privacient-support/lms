@@ -42,8 +42,20 @@ foreach ($iomadsaml2auth->metadataentities as $idpentity) {
     $metadataurlhash = md5($idpentity->metadataurl);
     $metadatasources[$metadataurlhash] = [
         'type' => 'xml',
-        'file' => "$CFG->dataroot/iomadsaml2/" . $metadataurlhash . $postfix . ".idp.xml"
+        'file' => $iomadsaml2auth->get_file_idp_metadata_file($idpentity->metadataurl),
     ];
+}
+// ACS often has no company session. Load one XML per metadata hash so Azure's
+// entity ID is still found instead of METADATANOTFOUND.
+if (empty($metadatasources)) {
+    $dir = $iomadsaml2auth->get_saml2_directory();
+    foreach (glob($dir . '/*.idp.xml') ?: [] as $file) {
+        $hash = preg_replace('/_\d+$/', '', basename($file, '.idp.xml'));
+        $metadatasources[$hash] = [
+            'type' => 'xml',
+            'file' => $file,
+        ];
+    }
 }
 
 $remoteip = getremoteaddr();
@@ -82,6 +94,7 @@ $config = array(
     'session.cookie.path'     => $CFG->sessioncookiepath,
     'session.cookie.domain'   => null,
     'session.cookie.secure'   => !empty($CFG->cookiesecure),
+    'session.cookie.samesite' => !empty($CFG->cookiesecure) ? 'None' : null,
     'session.cookie.lifetime' => 0,
 
     'session.phpsession.cookiename' => null,

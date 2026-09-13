@@ -38,18 +38,11 @@ class get_saml_config extends external_api {
             throw new \moodle_exception('invalidarguments', 'error', '', null, 'Unknown company');
         }
 
-        // The service-provider endpoints the customer's IdP must be told about.
-        // Built here rather than in the console because IOMAD is the authority
-        // on its own wwwroot, and auth_iomadsaml2 derives the SP name from that
-        // host — a console guessing at it would hand out URLs that 404.
-        global $CFG;
-        $spname = parse_url($CFG->wwwroot, PHP_URL_HOST);
-        $sp = [
-            'entityid' => "{$CFG->wwwroot}/auth/iomadsaml2/sp/metadata.php",
-            'metadataurl' => "{$CFG->wwwroot}/auth/iomadsaml2/sp/metadata.php",
-            'acsurl' => "{$CFG->wwwroot}/auth/iomadsaml2/sp/saml2-acs.php/{$spname}",
-            'slsurl' => "{$CFG->wwwroot}/auth/iomadsaml2/sp/saml2-logout.php/{$spname}",
-        ];
+        // Unique per company, the same way Infosec IQ (and every other
+        // multi-tenant SP) publishes metadata: one entity ID, ACS and
+        // metadata document per tenant so IdP apps do not collide.
+        \local_privacient\saml_sp::ensure_entity_id((int) $companyid);
+        $sp = \local_privacient\saml_sp::urls((int) $companyid);
 
         $metadata = (string) get_config('auth_iomadsaml2', "idpmetadata_{$companyid}");
         $enabledauths = explode(',', (string) get_config('core', 'auth'));
@@ -81,6 +74,8 @@ class get_saml_config extends external_api {
         return new external_single_structure([
             'companyid' => new external_value(PARAM_INT, 'Company id'),
             'sp' => new external_single_structure([
+                'token' => new external_value(PARAM_ALPHANUMEXT, "Opaque id for this company's SP endpoints"),
+                'loginurl' => new external_value(PARAM_RAW, 'Where the portal starts a SAML sign-in'),
                 'entityid' => new external_value(PARAM_RAW, 'Our SAML entity ID / issuer'),
                 'metadataurl' => new external_value(PARAM_RAW, 'Where our SP metadata is published'),
                 'acsurl' => new external_value(PARAM_RAW, 'Assertion Consumer Service (reply) URL'),

@@ -391,6 +391,10 @@ class manager {
         if (\core_useragent::is_moodle_app()) {
             // Moodle Mobile app for Android requires SameSite=None to allow embedding content such as H5P and SCORM.
             $sessionoptions['samesite'] = 'None';
+        } else if ($cookiesecure) {
+            // SAML ACS is a cross-site POST from the IdP. Lax cookies are not
+            // sent on that POST, which drops company context and IdP metadata.
+            $sessionoptions['samesite'] = 'None';
         } else {
             $sessionoptions['samesite'] = 'Lax';
         }

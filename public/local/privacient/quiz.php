@@ -70,6 +70,13 @@ $passed = $best !== null && $passmark > 0 && $best >= $passmark;
 $questioncount = count($quizobj->get_structure()->get_slots());
 $portal = trim((string) get_config('local_privacient', 'portalurl'));
 
+// In the native app there is no portal behind this page to return to — the app
+// closes the player itself — so the link at the foot is left out. See
+// local_privacient\app_client.
+if (\local_privacient\app_client::is_app_request()) {
+    $portal = '';
+}
+
 echo $OUTPUT->header();
 ?>
 <style>

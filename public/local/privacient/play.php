@@ -153,13 +153,17 @@ echo html_writer::div(
 );
 
 // Back to the portal, not to Moodle's course page: the course page is exactly
-// the Moodle surface this whole flow exists to keep learners out of.
-$portal = trim((string) get_config('local_privacient', 'portalurl'));
-echo html_writer::link(
-    $portal !== '' ? $portal : (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false),
-    get_string('backtotraining', 'local_privacient'),
-    ['class' => 'pv-back']
-);
+// the Moodle surface this whole flow exists to keep learners out of. In the
+// native app there is no portal to go back to — it closes the player itself —
+// so the link is left out entirely rather than leading somewhere confusing.
+if (!\local_privacient\app_client::is_app_request()) {
+    $portal = trim((string) get_config('local_privacient', 'portalurl'));
+    echo html_writer::link(
+        $portal !== '' ? $portal : (new moodle_url('/course/view.php', ['id' => $course->id]))->out(false),
+        get_string('backtotraining', 'local_privacient'),
+        ['class' => 'pv-back']
+    );
+}
 
 echo html_writer::end_div();
 

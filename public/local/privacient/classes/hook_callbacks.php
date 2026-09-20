@@ -116,7 +116,14 @@ class hook_callbacks {
             return;
         }
         $label = get_string('backtotraining', 'local_privacient');
-        $back = '<a class="pv-back" href="' . s($portal) . '">' . s($label) . '</a>';
+
+        // The native app closes the player itself, and has no portal behind this
+        // page to return to, so it gets no link. The quiz header below still
+        // renders — "question 3 of 5" is worth as much in the app as out of it.
+        $inapp = \local_privacient\app_client::is_app_request();
+        $back = $inapp
+            ? ''
+            : '<a class="pv-back" href="' . s($portal) . '">' . s($label) . '</a>';
 
         // Mid-paper, the back link alone is not enough: Moodle's own question
         // navigator is hidden, so without this a learner has no way of knowing
@@ -124,7 +131,9 @@ class hook_callbacks {
         // difference between a short task and an open-ended one.
         $position = self::quiz_attempt_position();
         if ($position === null) {
-            $hook->add_html('<div class="pv-back-bar">' . $back . '</div>');
+            if ($back !== '') {
+                $hook->add_html('<div class="pv-back-bar">' . $back . '</div>');
+            }
             return;
         }
 

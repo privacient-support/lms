@@ -86,4 +86,11 @@ $functions = [
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',
     ],
+    'local_privacient_update_content' => [
+        'classname'   => 'local_privacient\\external\\update_content',
+        'description' => "Edit a Content Hub item's metadata (title, description, tags, kind).",
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
 ];

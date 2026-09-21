@@ -22,11 +22,4 @@ $callbacks = [
         'callback' => \local_privacient\hook_callbacks::class . '::before_http_headers',
         'priority' => 0,
     ],
-    [
-        // Earliest point at which the database is up: the assertion consumer
-        // needs its company resolved before auth_iomadsaml2 is constructed.
-        'hook' => \core\hook\after_config::class,
-        'callback' => \local_privacient\hook_callbacks::class . '::after_config',
-        'priority' => 0,
-    ],
 ];

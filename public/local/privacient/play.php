@@ -164,6 +164,7 @@ if (!\local_privacient\app_client::is_app_request()) {
         ['class' => 'pv-back']
     );
 }
+
 echo html_writer::end_div();
 
 // Strings the inline module needs, resolved server-side.

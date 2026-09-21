@@ -32,7 +32,7 @@ class set_saml_config extends external_api {
     }
 
     public static function execute($companyid, $metadata, $displayname = '', $active = true): array {
-        global $CFG, $DB, $SESSION, $iomadsaml2auth;
+        global $CFG, $DB;
         require_once($CFG->libdir . '/adminlib.php');
 
         [
@@ -73,40 +73,9 @@ class set_saml_config extends external_api {
             set_config("privatekeypass_{$companyid}", $sitepass, 'auth_iomadsaml2');
         }
 
-        // Which company auth_iomadsaml2 believes is current, not just the
-        // postfix handed to the setting below.
-        //
-        // The setting stores `idpmetadata_1` from its argument, but the fetched
-        // document is cached to disk under a name the *auth plugin* builds, and
-        // that name takes its postfix from `iomad::get_my_companyid()`. A web
-        // service call has no current company, so the file landed as
-        // `<hash>.idp.xml` while every learner request — which does resolve a
-        // company — looked for `<hash>_1.idp.xml` and died with
-        // "Invalid configuration of the 'metadata.sources' configuration
-        // option: Error fetching ... No such file or directory".
-        //
-        // Restored afterwards: this session belongs to whoever called the
-        // service, and silently reassigning their company would change what
-        // the rest of their request sees.
-        $hadcompany = isset($SESSION->currenteditingcompany);
-        $previouscompany = $SESSION->currenteditingcompany ?? null;
-        $SESSION->currenteditingcompany = $companyid;
-        // Rebuilt rather than reused: the singleton reads the postfix once, in
-        // its constructor, so one created before this point still has none.
-        require_once($CFG->dirroot . '/auth/iomadsaml2/setup.php');
-        $iomadsaml2auth = new \auth_iomadsaml2\auth();
-
-        try {
-            // The company postfix is how auth_iomadsaml2 keeps tenants apart.
-            $setting = new \auth_iomadsaml2\admin\setting_idpmetadata("_{$companyid}");
-            $error = $setting->write_setting($metadata);
-        } finally {
-            if ($hadcompany) {
-                $SESSION->currenteditingcompany = $previouscompany;
-            } else {
-                unset($SESSION->currenteditingcompany);
-            }
-        }
+        // The company postfix is how auth_iomadsaml2 keeps tenants apart.
+        $setting = new \auth_iomadsaml2\admin\setting_idpmetadata("_{$companyid}");
+        $error = $setting->write_setting($metadata);
         if (!empty($error)) {
             // The plugin returns a human-readable reason: unreachable URL,
             // malformed XML, no IdP entity in the document.

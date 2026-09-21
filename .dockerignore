@@ -1,0 +1,8 @@
+.git
+.gitignore
+**/.git
+node_modules
+npm-shrinkwrap.json
+**/.DS_Store
+*.md
+!README.md

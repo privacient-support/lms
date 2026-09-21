@@ -72,6 +72,14 @@ class delete_company extends external_api {
             ];
         }
 
+        // Drop this company's IdP rows and metadata now. IOMAD's adhoc
+        // delete does not touch auth_iomadsaml2_idps; leftover rows still
+        // send learners to Azure while SimpleSAMLphp has no XML for them.
+        $DB->delete_records('auth_iomadsaml2_idps', ['companyid' => $companyid]);
+        unset_config("idpmetadata_{$companyid}", 'auth_iomadsaml2');
+        unset_config("spentityid_{$companyid}", 'auth_iomadsaml2');
+        \local_privacient\saml_sp::forget($companyid);
+
         $event = company_deleted::create([
             'context'  => $companycontext,
             'objectid' => $companyid,

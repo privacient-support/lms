@@ -71,5 +71,77 @@ function xmldb_local_privacient_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026091008, 'local', 'privacient');
     }
 
+    if ($oldversion < 2026091028) {
+        $service = $DB->get_record('external_services', ['shortname' => 'iomadservice']);
+        if ($service && !$DB->record_exists('external_services_functions', [
+            'externalserviceid' => $service->id,
+            'functionname' => 'local_privacient_ensure_learner',
+        ])) {
+            $DB->insert_record('external_services_functions', (object) [
+                'externalserviceid' => $service->id,
+                'functionname' => 'local_privacient_ensure_learner',
+            ]);
+        }
+        upgrade_plugin_savepoint(true, 2026091028, 'local', 'privacient');
+    }
+
+    if ($oldversion < 2026091029) {
+        // Give every existing company its own SP entity ID. Until this, the
+        // console handed out the site-wide metadata URL to every tenant.
+        $companies = $DB->get_records('local_iomad_companies', null, '', 'id');
+        foreach ($companies as $company) {
+            \local_privacient\saml_sp::ensure_entity_id((int) $company->id);
+        }
+        upgrade_plugin_savepoint(true, 2026091029, 'local', 'privacient');
+    }
+
+    if ($oldversion < 2026091030) {
+        // Pre-provisioned roster users are auth=manual. SAML was configured
+        // with anyauth off, so Azure accepted them and Moodle then showed
+        // "not authorized to access Moodle".
+        $companies = $DB->get_records('local_iomad_companies', null, '', 'id');
+        foreach ($companies as $company) {
+            if ((string) get_config('auth_iomadsaml2', "idpmetadata_{$company->id}") !== '') {
+                \local_privacient\saml_sp::allow_roster_sso((int) $company->id);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026091030, 'local', 'privacient');
+    }
+
+    if ($oldversion < 2026091031) {
+        $companies = $DB->get_records('local_iomad_companies', null, '', 'id');
+        foreach ($companies as $company) {
+            if ((string) get_config('auth_iomadsaml2', "idpmetadata_{$company->id}") !== '') {
+                \local_privacient\saml_sp::allow_roster_sso((int) $company->id);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026091031, 'local', 'privacient');
+    }
+
+    if ($oldversion < 2026091032) {
+        // SP endpoints used to carry the company id, so anyone could walk /1,
+        // /2, /3 and read every customer's metadata. Mint a token per company
+        // and re-point the entity IDs at it.
+        $companies = $DB->get_records('local_iomad_companies', null, '', 'id');
+        foreach ($companies as $company) {
+            \local_privacient\saml_sp::ensure_entity_id((int) $company->id);
+        }
+        upgrade_plugin_savepoint(true, 2026091032, 'local', 'privacient');
+    }
+
+    if ($oldversion < 2026091033) {
+        // Ask for an email NameID. The plugin's default asks for a transient
+        // one, which Entra ID answers with an opaque per-session value that
+        // matches no account: "logged in successfully as '7zr9jup9...=' but do
+        // not have an account in Moodle".
+        $companies = $DB->get_records('local_iomad_companies', null, '', 'id');
+        foreach ($companies as $company) {
+            if ((string) get_config('auth_iomadsaml2', "idpmetadata_{$company->id}") !== '') {
+                \local_privacient\saml_sp::allow_roster_sso((int) $company->id);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026091033, 'local', 'privacient');
+    }
+
     return true;
 }

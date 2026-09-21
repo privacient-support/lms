@@ -51,6 +51,9 @@ class set_saml_config extends external_api {
             throw new \moodle_exception('invalidarguments', 'error', '', null, 'Unknown company');
         }
 
+        \local_privacient\saml_sp::ensure_entity_id((int) $companyid);
+        \local_privacient\saml_sp::allow_roster_sso((int) $companyid);
+
         $metadata = trim($metadata);
         if ($metadata === '') {
             throw new \moodle_exception(
@@ -59,18 +62,15 @@ class set_saml_config extends external_api {
             );
         }
 
-        // The SP private key's passphrase, copied to this company's name.
-        //
-        // There is one SP keypair for the whole site — `<host>.pem`, created
-        // once with the site-wide passphrase — but auth_iomadsaml2 reads the
-        // passphrase per company, as `privatekeypass_1`. With no company copy
-        // get_config() answers false, which is neither a string nor null, and
-        // SimpleSAMLphp refuses to start: "authsources['<host>']: The option
-        // 'privatekey_pass' is not a valid string value or null."
-        $sitekeypass = get_config('auth_iomadsaml2', 'privatekeypass');
-        if ($sitekeypass !== false
-            && get_config('auth_iomadsaml2', "privatekeypass_{$companyid}") !== $sitekeypass) {
-            set_config("privatekeypass_{$companyid}", $sitekeypass, 'auth_iomadsaml2');
+        // auth_iomadsaml2 looks up privatekeypass_{companyid} and passes the
+        // result straight to SimpleSAMLphp. get_config() returns boolean false
+        // when that key is missing, which SSP rejects ("not a valid string
+        // value or null") and SSO dies before the IdP is contacted. The SP
+        // certificate is site-wide, so copy the site passphrase when the
+        // company does not have its own.
+        $sitepass = get_config('auth_iomadsaml2', 'privatekeypass');
+        if (is_string($sitepass) && get_config('auth_iomadsaml2', "privatekeypass_{$companyid}") === false) {
+            set_config("privatekeypass_{$companyid}", $sitepass, 'auth_iomadsaml2');
         }
 
         // Which company auth_iomadsaml2 believes is current, not just the

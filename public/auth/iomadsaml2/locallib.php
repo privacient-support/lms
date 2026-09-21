@@ -67,7 +67,10 @@ function auth_iomadsaml2_get_sp_metadata($baseurl = '') {
     );
     $slob = $spconfig->getOptionalArray('SingleLogoutServiceBinding', $slosvcdefault);
 
-    $slol = "{$baseurl}/auth/iomadsaml2/sp/saml2-logout.php/{$sourceId}";
+    $slol = $spconfig->getOptionalString(
+        'SingleLogoutServiceLocation',
+        "{$baseurl}/auth/iomadsaml2/sp/saml2-logout.php/{$sourceId}"
+    );
 
     foreach ($slob as $binding) {
         $metaArray20['SingleLogoutService'][] = array(
@@ -85,33 +88,37 @@ function auth_iomadsaml2_get_sp_metadata($baseurl = '') {
      $assertionsconsumerservicesdefault[] = 'urn:oasis:names:tc:SAML:2.0:profiles:holder-of-key:SSO:browser';
     }
 
-    $assertionsconsumerservices = $spconfig->getOptionalArray('acs.Bindings', $assertionsconsumerservicesdefault);
+    if ($spconfig->hasValue('AssertionConsumerService')) {
+        $metaArray20['AssertionConsumerService'] = $spconfig->getArray('AssertionConsumerService');
+    } else {
+        $assertionsconsumerservices = $spconfig->getOptionalArray('acs.Bindings', $assertionsconsumerservicesdefault);
 
-    $index = 0;
-    $eps = array();
-    foreach ($assertionsconsumerservices as $services) {
+        $index = 0;
+        $eps = array();
+        foreach ($assertionsconsumerservices as $services) {
 
-        $acsArray = array('index' => $index);
-        switch ($services) {
-        case 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST':
-            $acsArray['Binding'] = SAML2\Constants::BINDING_HTTP_POST;
-            $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
-            break;
-        case 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact':
-            $acsArray['Binding'] = 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact';
-            $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
-            break;
-        case 'urn:oasis:names:tc:SAML:2.0:profiles:holder-of-key:SSO:browser':
-            $acsArray['Binding'] = 'urn:oasis:names:tc:SAML:2.0:profiles:holder-of-key:SSO:browser';
-            $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
-            $acsArray['hoksso:ProtocolBinding'] = SAML2\Constants::BINDING_HTTP_REDIRECT;
-            break;
+            $acsArray = array('index' => $index);
+            switch ($services) {
+            case 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST':
+                $acsArray['Binding'] = SAML2\Constants::BINDING_HTTP_POST;
+                $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
+                break;
+            case 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact':
+                $acsArray['Binding'] = 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact';
+                $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
+                break;
+            case 'urn:oasis:names:tc:SAML:2.0:profiles:holder-of-key:SSO:browser':
+                $acsArray['Binding'] = 'urn:oasis:names:tc:SAML:2.0:profiles:holder-of-key:SSO:browser';
+                $acsArray['Location'] = "{$baseurl}/auth/iomadsaml2/sp/saml2-acs.php/{$sourceId}";
+                $acsArray['hoksso:ProtocolBinding'] = SAML2\Constants::BINDING_HTTP_REDIRECT;
+                break;
+            }
+            $eps[] = $acsArray;
+            $index++;
         }
-        $eps[] = $acsArray;
-        $index++;
-    }
 
-    $metaArray20['AssertionConsumerService'] = $eps;
+        $metaArray20['AssertionConsumerService'] = $eps;
+    }
 
     $keys = array();
     $cryptoUtils = new \SimpleSAML\Utils\Crypto();

@@ -40,11 +40,11 @@ function xmldb_block_iomad_company_admin_upgrade($oldversion) {
         $systemcontext = context_system::instance();
 
         // We need to restrict the view edit users in the same way as the editusers capability is currently.
-        $currentcompanies = $DB->get_records('company_role_restriction', ['capability' => 'block/iomad_company_admin:editusers']);
+        $currentcompanies = $DB->get_records('local_iomad_company_role_restrictions', ['capability' => 'block/iomad_company_admin:editusers']);
         foreach ($currentcompanies as $restriction) {
             unset($restriction->id);
             $restriction->capability = 'block/iomad_company_admin:view_editusers';
-            $DB->insert_record('company_role_restriction', $restriction);
+            $DB->insert_record('local_iomad_company_role_restrictions', $restriction);
         }
 
         // Deal with IOMAD roles which should have the cap but don't so we can match.

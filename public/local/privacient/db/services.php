@@ -16,6 +16,13 @@ $functions = [
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',
     ],
+    'local_privacient_update_content' => [
+        'classname'   => 'local_privacient\\external\\update_content',
+        'description' => 'Edit a Content Hub item\'s title, description, tags and kind.',
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
     'local_privacient_list_content' => [
         'classname'   => 'local_privacient\\external\\list_content',
         'description' => 'List Content Hub items.',
@@ -40,6 +47,13 @@ $functions = [
     'local_privacient_enrol_learner' => [
         'classname'   => 'local_privacient\\external\\enrol_learner',
         'description' => 'Ensure a learner exists, enrol them, and mint a launch key.',
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
+    'local_privacient_ensure_learner' => [
+        'classname'   => 'local_privacient\\external\\ensure_learner',
+        'description' => 'Create a Moodle user for a console team member and attach them to the IOMAD company.',
         'type'        => 'write',
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',

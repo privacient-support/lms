@@ -1,0 +1,61 @@
+services:
+  web:
+    container_name: lms
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lms:latest
+    ports:
+      - "${MOODLE_HTTP_PORT:-8080}:80"
+    environment:
+      MOODLE_DATABASE_HOST: ${MOODLE_DATABASE_HOST}
+      MOODLE_DATABASE_PORT: ${MOODLE_DATABASE_PORT:-3306}
+      MOODLE_DATABASE_NAME: ${MOODLE_DATABASE_NAME}
+      MOODLE_DATABASE_USER: ${MOODLE_DATABASE_USER}
+      MOODLE_DATABASE_PASSWORD: ${MOODLE_DATABASE_PASSWORD}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT}
+      MOODLE_DATAROOT: /var/moodledata
+    volumes:
+      - lms_moodledata:/var/moodledata
+      - ./docker/apache-lms.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./public/local/privacient:/var/www/html/public/local/privacient:ro
+      - ./public/auth/iomadsaml2/classes/auth.php:/var/www/html/public/auth/iomadsaml2/classes/auth.php:ro
+      - ./public/auth/iomadsaml2/config/authsources.php:/var/www/html/public/auth/iomadsaml2/config/authsources.php:ro
+      - ./public/auth/iomadsaml2/config/config.php:/var/www/html/public/auth/iomadsaml2/config/config.php:ro
+      - ./public/auth/iomadsaml2/locallib.php:/var/www/html/public/auth/iomadsaml2/locallib.php:ro
+      - ./public/auth/iomadsaml2/.extlib/simplesamlphp/modules/saml/src/Auth/Source/SP.php:/var/www/html/public/auth/iomadsaml2/.extlib/simplesamlphp/modules/saml/src/Auth/Source/SP.php:ro
+    networks:
+      - default
+      - backend
+    restart: unless-stopped
+
+  cron:
+    container_name: lms-cron
+    image: lms:latest
+    depends_on:
+      - web
+    user: www-data
+    environment:
+      MOODLE_DATABASE_HOST: ${MOODLE_DATABASE_HOST}
+      MOODLE_DATABASE_PORT: ${MOODLE_DATABASE_PORT:-3306}
+      MOODLE_DATABASE_NAME: ${MOODLE_DATABASE_NAME}
+      MOODLE_DATABASE_USER: ${MOODLE_DATABASE_USER}
+      MOODLE_DATABASE_PASSWORD: ${MOODLE_DATABASE_PASSWORD}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT}
+      MOODLE_DATAROOT: /var/moodledata
+    volumes:
+      - lms_moodledata:/var/moodledata
+      - ./public/local/privacient:/var/www/html/public/local/privacient:ro
+      - ./docker/cron.sh:/var/www/html/docker/cron.sh:ro
+    networks:
+      - default
+      - backend
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/var/www/html/docker/cron.sh"]
+
+networks:
+  backend:
+    external: true
+
+volumes:
+  lms_moodledata:

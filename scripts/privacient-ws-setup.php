@@ -143,6 +143,7 @@ $functions = [
     'local_privacient_publish_questionnaire',
     'local_privacient_enrol_learner',
     'local_privacient_ensure_learner',
+    'local_privacient_delete_learner',
     'local_privacient_get_saml_config',
     'local_privacient_set_saml_config',
 ];

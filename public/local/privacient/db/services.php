@@ -58,6 +58,13 @@ $functions = [
         'ajax'        => false,
         'capabilities' => 'local/privacient:managecontent',
     ],
+    'local_privacient_delete_learner' => [
+        'classname'   => 'local_privacient\\external\\delete_learner',
+        'description' => 'Remove a console team member from the learning platform (delete, or detach if shared).',
+        'type'        => 'write',
+        'ajax'        => false,
+        'capabilities' => 'local/privacient:managecontent',
+    ],
     'local_privacient_set_poster' => [
         'classname'   => 'local_privacient\\external\\set_poster',
         'description' => 'Attach or remove a Content Hub cover image.',

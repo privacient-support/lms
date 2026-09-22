@@ -143,5 +143,24 @@ function xmldb_local_privacient_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026091033, 'local', 'privacient');
     }
 
+    if ($oldversion < 2026092201) {
+        // The console's team-member delete now removes the learner here too.
+        // Registered on the console's own service (privacient-ws-setup.php
+        // creates it) and on iomadservice where an older install used that.
+        foreach (['privacient_training', 'iomadservice'] as $shortname) {
+            $service = $DB->get_record('external_services', ['shortname' => $shortname]);
+            if ($service && !$DB->record_exists('external_services_functions', [
+                'externalserviceid' => $service->id,
+                'functionname' => 'local_privacient_delete_learner',
+            ])) {
+                $DB->insert_record('external_services_functions', (object) [
+                    'externalserviceid' => $service->id,
+                    'functionname' => 'local_privacient_delete_learner',
+                ]);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026092201, 'local', 'privacient');
+    }
+
     return true;
 }

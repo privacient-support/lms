@@ -21,7 +21,8 @@ class set_poster extends external_api {
             'draftitemid' => new external_value(PARAM_INT, 'Draft item id holding the image; 0 removes the poster'),
             'tenantid' => new external_value(
                 PARAM_INT,
-                'Library the caller may write to: -1 any, 0 global, >0 that tenant',
+                'Library the caller may write to: 0 global, >0 that tenant. '
+                    . 'A missing or negative value is rejected, never treated as "any".',
                 VALUE_DEFAULT,
                 -1
             ),
@@ -44,9 +45,10 @@ class set_poster extends external_api {
         if (!$record) {
             throw new \moodle_exception('invalidrecord', 'error', '', null, 'No such content item');
         }
-        // Same ownership rule as delete: a tenant may not restyle the global
-        // library or another tenant's material.
-        if ((int) $tenantid >= 0 && (int) $record->tenantid !== (int) $tenantid) {
+        // Same ownership rule as delete, fail closed: a missing/negative
+        // tenantid is rejected rather than matching every tenant, so a tenant
+        // may not restyle the global library or another tenant's material.
+        if ((int) $tenantid < 0 || (int) $record->tenantid !== (int) $tenantid) {
             // $a carries the reason; null there renders a literal "{$a}".
             throw new \moodle_exception(
                 'nopermissions',

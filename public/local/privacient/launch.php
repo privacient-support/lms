@@ -26,6 +26,32 @@ $key = validate_user_key($keyvalue, 'local_privacient', $stored->instance);
 $user = $DB->get_record('user', ['id' => $key->userid, 'deleted' => 0], '*', MUST_EXIST);
 $courseid = (int) $key->instance;
 
+// A launch key is a passwordless login, so honour it only for an account that
+// is still a genuine, active learner of the company that owns this course. A
+// key minted while the account was a plain learner must not still let it in
+// after the account has been suspended, promoted to a manager or site admin,
+// or moved to another company — nor may a site admin ever be logged in this
+// way. Fail closed: deny unless a company that owns the course counts this
+// user among its non-suspended plain learners.
+if (is_siteadmin($user) || !empty($user->suspended) || $user->auth === 'nologin') {
+    throw new moodle_exception('nopermissions', 'error', '', null,
+        'This launch link is no longer valid for that account');
+}
+$owners = $DB->get_fieldset_select(
+    'local_iomad_company_courses', 'companyid', 'courseid = ?', [$courseid]
+);
+$islearner = false;
+foreach ($owners as $ownercompanyid) {
+    if (\local_privacient\learner::is_company_learner($user, (int) $ownercompanyid)) {
+        $islearner = true;
+        break;
+    }
+}
+if (!$islearner) {
+    throw new moodle_exception('nopermissions', 'error', '', null,
+        'This launch link is no longer valid for that account');
+}
+
 // Single use: consume before establishing the session.
 $DB->delete_records('user_private_key', ['id' => $key->id]);
 

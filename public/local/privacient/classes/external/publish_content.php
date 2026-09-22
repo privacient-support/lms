@@ -29,22 +29,43 @@ class publish_content extends external_api {
                 VALUE_DEFAULT,
                 0
             ),
+            'companyid' => new external_value(
+                PARAM_INT,
+                'When >0, the reused course must belong to this company; fail closed otherwise',
+                VALUE_DEFAULT,
+                0
+            ),
         ]);
     }
 
-    public static function execute($id, $courseid = 0, $forcenew = false): array {
+    public static function execute($id, $courseid = 0, $forcenew = false, $companyid = 0): array {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/course/lib.php');
         require_once($CFG->dirroot . '/course/modlib.php');
 
-        ['id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew] =
+        ['id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew, 'companyid' => $companyid] =
             self::validate_parameters(self::execute_parameters(), [
-                'id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew,
+                'id' => $id, 'courseid' => $courseid, 'forcenew' => $forcenew, 'companyid' => $companyid,
             ]);
 
         $context = context_system::instance();
         self::validate_context($context);
         require_capability('local/privacient:managecontent', $context);
+
+        // Tenant scoping: publishing into an existing course injects a module
+        // into it, so when the caller names a company the target must be that
+        // company's own course. Fail closed on a mismatch. Creating a fresh
+        // course (courseid 0) is exempt — the new course carries no company
+        // link yet and is placed in Privacient's own category.
+        if ((int) $companyid > 0 && (int) $courseid > 0
+                && !$DB->record_exists('local_iomad_company_courses', [
+                    'companyid' => (int) $companyid, 'courseid' => (int) $courseid,
+                ])) {
+            throw new \moodle_exception(
+                'nopermissions', 'error', '', null,
+                'That course does not belong to the given company'
+            );
+        }
 
         $record = $DB->get_record('local_privacient_content', ['id' => $id], '*', MUST_EXIST);
         if (!in_array($record->kind, ['scorm', 'video'], true)) {

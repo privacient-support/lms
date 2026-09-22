@@ -58,6 +58,12 @@ class publish_questionnaire extends external_api {
                     'explanation' => new external_value(PARAM_RAW, 'Shown after answering', VALUE_DEFAULT, ''),
                 ])
             ),
+            'companyid' => new external_value(
+                PARAM_INT,
+                'When >0, the reused course must belong to this company; fail closed otherwise',
+                VALUE_DEFAULT,
+                0
+            ),
         ]);
     }
 
@@ -89,7 +95,8 @@ class publish_questionnaire extends external_api {
         bool $shuffleoptions,
         int $maxattempts,
         int $courseid,
-        array $questions
+        array $questions,
+        int $companyid = 0
     ): array {
         global $CFG, $DB, $USER;
 
@@ -102,10 +109,25 @@ class publish_questionnaire extends external_api {
             'maxattempts' => $maxattempts,
             'courseid' => $courseid,
             'questions' => $questions,
+            'companyid' => $companyid,
         ]);
 
         self::validate_context(\context_system::instance());
         require_capability('local/privacient:managecontent', \context_system::instance());
+
+        // Tenant scoping: reusing an existing course adds a quiz to it, so when
+        // the caller names a company the target must be that company's own
+        // course. Fail closed on a mismatch. Creating a fresh course is exempt
+        // — it carries no company link yet.
+        if ((int) $params['companyid'] > 0 && (int) $params['courseid'] > 0
+                && !$DB->record_exists('local_iomad_company_courses', [
+                    'companyid' => (int) $params['companyid'], 'courseid' => (int) $params['courseid'],
+                ])) {
+            throw new \moodle_exception(
+                'nopermissions', 'error', '', null,
+                'That course does not belong to the given company'
+            );
+        }
 
         if (empty($params['questions'])) {
             throw new \moodle_exception('invalidparameter', 'debug', '', null,

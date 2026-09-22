@@ -26,6 +26,7 @@ $PAGE->set_url('/local/privacient/quiz.php', ['cmid' => $cmid]);
 require_login($course, false, $cm);
 
 $context = context_module::instance($cm->id);
+require_capability('mod/quiz:view', $context);
 $quizobj = \mod_quiz\quiz_settings::create($cm->instance, $USER->id);
 $quiz = $quizobj->get_quiz();
 

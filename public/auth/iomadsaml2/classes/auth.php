@@ -780,17 +780,9 @@ class auth extends \auth_plugin_base {
                 // We found a user.
                 break;
             }
-            // Learners are keyed by email in the portal; Azure may assert
-            // that address against username or email depending on how the
-            // Moodle account was created.
-            foreach (['email', 'username'] as $fallbackfield) {
-                if ($fallbackfield === $this->config->mdlattr) {
-                    continue;
-                }
-                if ($user = user_extractor::get_user($fallbackfield, $uid, $insensitive, $accentsensitive)) {
-                    break 2;
-                }
-            }
+            // Match only on the configured mapping attribute (email). The
+            // former username fallback let a bare asserted value like 'admin'
+            // resolve the site admin, so it has been removed.
         }
 
         // Moodle Workplace - Check IdP's tenant availability, for new user pre-allocate to tenant.
@@ -881,6 +873,45 @@ class auth extends \auth_plugin_base {
             }
 
             $this->log(__FUNCTION__ . ' found user '.$user->username);
+        }
+
+        // IOMAD/Privacient multi-tenant gate. Every IdP belongs to exactly one
+        // company, and its assertions may only sign in that company's own
+        // learners. Without this, a tenant admin who controls their company's
+        // IdP could assert any address — including the site admin's or another
+        // tenant's learner's — and be logged in as them, because the lookup
+        // above is site-wide. Determine the company this login flow belongs to
+        // (from the IdP that issued it first, then the SP token on the request,
+        // then the company bound in session) and refuse unless the resolved
+        // user is a non-suspended plain learner of it. Fail closed if the flow
+        // company cannot be determined.
+        if (class_exists(\local_privacient\learner::class)) {
+            $flowcompanyid = 0;
+            if (!empty($SESSION->iomadsaml2idp)
+                    && isset($this->metadataentities[$SESSION->iomadsaml2idp])) {
+                $flowcompanyid = (int) ($this->metadataentities[$SESSION->iomadsaml2idp]->companyid ?? 0);
+            }
+            if ($flowcompanyid <= 0 && class_exists(\local_privacient\saml_sp::class)) {
+                $flowcompanyid = (int) \local_privacient\saml_sp::company_id_from_request();
+            }
+            if ($flowcompanyid <= 0 && !empty($SESSION->currenteditingcompany)) {
+                $flowcompanyid = (int) $SESSION->currenteditingcompany;
+            }
+
+            if ($flowcompanyid <= 0
+                    || !\local_privacient\learner::is_company_learner($user, $flowcompanyid)) {
+                $event = \core\event\user_login_failed::create([
+                    'userid' => $user->id,
+                    'other' => [
+                        'username' => $user->username,
+                        'reason' => AUTH_LOGIN_UNAUTHORISED,
+                    ],
+                ]);
+                $event->trigger();
+
+                $this->log(__FUNCTION__ . " user $uid is not a learner of company $flowcompanyid");
+                $this->error_page(get_string('wrongauth', 'auth_iomadsaml2', $uid));
+            }
         }
 
         if (!$this->config->anyauth && $user->auth != 'iomadsaml2') {

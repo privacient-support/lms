@@ -14,7 +14,8 @@ class delete_content extends external_api {
             'id' => new external_value(PARAM_INT, 'Content item id'),
             'tenantid' => new external_value(
                 PARAM_INT,
-                'Tenant the caller may delete from: -1 any, 0 global, >0 that tenant',
+                'Tenant the caller may delete from: 0 global, >0 that tenant. '
+                    . 'A missing or negative value is rejected, never treated as "any".',
                 VALUE_DEFAULT,
                 -1
             ),
@@ -37,9 +38,11 @@ class delete_content extends external_api {
             return ['deleted' => false];
         }
 
-        // Ownership check, so a tenant cannot delete the global library or
-        // another tenant's material even if it learns the id.
-        if ((int) $tenantid >= 0 && (int) $record->tenantid !== (int) $tenantid) {
+        // Ownership check, fail closed. A missing/negative tenantid used to
+        // mean "any tenant" and skipped this entirely, so a scope the caller
+        // never proved would delete across every tenant. Now the caller must
+        // name the exact owning tenant (0 = global) or the operation is denied.
+        if ((int) $tenantid < 0 || (int) $record->tenantid !== (int) $tenantid) {
             // The reason goes in $a, not in debuginfo. Passing null there
             // rendered the raw "{$a}" placeholder to the user and buried the
             // real cause in debuginfo, which is hidden unless debugging is on —

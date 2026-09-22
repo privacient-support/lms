@@ -29,6 +29,22 @@ class learner {
             ]);
         }
 
+        // Never adopt or mutate a pre-existing account that reaches beyond this
+        // company's learners: a site admin or guest, an account linked to
+        // another company or holding a managing role, a web-service token
+        // holder, or anyone with a system/category-level role. Such an account
+        // is not this company's to claim, and flipping its auth to SAML would
+        // hand that company's IdP a login it must never have. Only a genuinely
+        // new account, or one already a plain learner of THIS company, is
+        // linked. The callers surface the thrown failure rather than silently
+        // adopting.
+        if ($user && self::is_privileged_or_shared($user, $companyid)) {
+            throw new \moodle_exception(
+                'nopermissions', 'error', '', null,
+                'That email belongs to an account this company may not adopt'
+            );
+        }
+
         $auth = self::auth_for_company($companyid);
 
         if (!$user) {
@@ -77,6 +93,12 @@ class learner {
      * data. Such an account is only detached from this company — unenrolled
      * from the courses this company put them on and unlinked from the company.
      *
+     * Nothing happens unless the account is linked to $companyid as a learner:
+     * the caller names a company, and an account that is not that company's
+     * learner is not that company's to remove. (An earlier version deleted
+     * any account with no company link at all, which reached platform staff
+     * and the console's own web-service account.)
+     *
      * @return string 'deleted', 'detached' or 'notfound'
      */
     public static function remove(string $email, int $companyid, array $courseids): string {
@@ -84,28 +106,32 @@ class learner {
         require_once($CFG->dirroot . '/user/lib.php');
         require_once($CFG->libdir . '/enrollib.php');
 
+        if ($companyid <= 0) {
+            return 'notfound';
+        }
         $email = \core_text::strtolower(trim($email));
         $user = $DB->get_record('user', [
             'email' => $email, 'mnethostid' => $CFG->mnet_localhost_id, 'deleted' => 0,
         ]) ?: $DB->get_record('user', [
             'username' => $email, 'mnethostid' => $CFG->mnet_localhost_id, 'deleted' => 0,
         ]);
-        if (!$user) {
+        if (!$user || !$DB->record_exists('local_iomad_company_users', [
+            'companyid' => $companyid, 'userid' => $user->id, 'managertype' => 0,
+        ])) {
             return 'notfound';
         }
 
-        $links = $DB->get_records('local_iomad_company_users', ['userid' => $user->id]);
-        $elsewhere = false;
-        foreach ($links as $link) {
-            if ((int) $link->companyid !== $companyid || (int) $link->managertype !== 0) {
-                $elsewhere = true;
-            }
-        }
-
-        if (!$elsewhere && !is_siteadmin($user) && !isguestuser($user)) {
+        if (!self::is_privileged_or_shared($user, $companyid)) {
             delete_user($user);
             return 'deleted';
         }
+
+        // Only courses this company owns: the caller's list is a hint, not an
+        // authority, so another customer's enrolments stay untouched.
+        $companycourses = $DB->get_fieldset_select(
+            'local_iomad_company_courses', 'courseid', 'companyid = ?', [$companyid]
+        );
+        $courseids = array_intersect(array_map('intval', $courseids), array_map('intval', $companycourses));
 
         foreach (array_unique($courseids) as $courseid) {
             foreach (enrol_get_instances($courseid, false) as $instance) {
@@ -121,6 +147,75 @@ class learner {
             'companyid' => $companyid, 'userid' => $user->id, 'managertype' => 0,
         ]);
         return 'detached';
+    }
+
+    /**
+     * True when deleting this account could reach beyond one company's
+     * learner: a site admin or guest, anyone with a system- or category-level
+     * role, a web-service token holder, or an account also linked to another
+     * company or holding a managing role in one.
+     */
+    private static function is_privileged_or_shared(\stdClass $user, int $companyid): bool {
+        global $DB;
+
+        if (is_siteadmin($user) || isguestuser($user)) {
+            return true;
+        }
+        if ($DB->record_exists_select(
+            'local_iomad_company_users',
+            'userid = ? AND (companyid <> ? OR managertype <> 0)',
+            [$user->id, $companyid]
+        )) {
+            return true;
+        }
+        if ($DB->record_exists('external_tokens', ['userid' => $user->id])) {
+            return true;
+        }
+        return $DB->record_exists_sql(
+            'SELECT 1
+               FROM {role_assignments} ra
+               JOIN {context} ctx ON ctx.id = ra.contextid
+              WHERE ra.userid = ? AND ctx.contextlevel IN (?, ?)',
+            [$user->id, CONTEXT_SYSTEM, CONTEXT_COURSECAT]
+        );
+    }
+
+    /**
+     * True only when this account may sign in as a learner of $companyid.
+     *
+     * The gate for company-scoped SSO: a non-suspended plain learner
+     * (managertype = 0) of exactly this company, never a site admin or guest,
+     * and never anyone holding a system- or category-level role. This is what
+     * stops one company's IdP vouching for a site admin, a manager, or another
+     * tenant's user once the assertion has been verified.
+     */
+    public static function is_company_learner(\stdClass $user, int $companyid): bool {
+        global $DB;
+
+        if ($companyid <= 0 || empty($user->id)) {
+            return false;
+        }
+        if (is_siteadmin($user) || isguestuser($user)) {
+            return false;
+        }
+        if (!$DB->record_exists('local_iomad_company_users', [
+            'companyid' => $companyid,
+            'userid' => $user->id,
+            'managertype' => 0,
+            'suspended' => 0,
+        ])) {
+            return false;
+        }
+        if ($DB->record_exists_sql(
+            'SELECT 1
+               FROM {role_assignments} ra
+               JOIN {context} ctx ON ctx.id = ra.contextid
+              WHERE ra.userid = ? AND ctx.contextlevel IN (?, ?)',
+            [$user->id, CONTEXT_SYSTEM, CONTEXT_COURSECAT]
+        )) {
+            return false;
+        }
+        return true;
     }
 
     /**

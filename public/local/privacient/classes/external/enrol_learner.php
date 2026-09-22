@@ -48,7 +48,32 @@ class enrol_learner extends external_api {
         require_capability('local/privacient:managecontent', $context);
 
         $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
-        $user = \local_privacient\learner::ensure($email, $firstname, $lastname, (int) $companyid);
+
+        // Tenant scoping, fail closed. The launch key this mints logs the
+        // learner straight in with no password, so it must only ever be issued
+        // for a genuine, non-suspended plain learner of the company that owns
+        // the target course. Verify the course belongs to the named company,
+        // and that the resolved account is that company's learner and neither a
+        // site admin nor suspended, before enrolling or minting anything.
+        $companyid = (int) $companyid;
+        if ($companyid <= 0 || !$DB->record_exists('local_iomad_company_courses', [
+                'companyid' => $companyid, 'courseid' => $course->id,
+            ])) {
+            throw new \moodle_exception(
+                'nopermissions', 'error', '', null,
+                'That course does not belong to the given company'
+            );
+        }
+
+        $user = \local_privacient\learner::ensure($email, $firstname, $lastname, $companyid);
+
+        if (is_siteadmin($user) || !empty($user->suspended)
+                || !\local_privacient\learner::is_company_learner($user, $companyid)) {
+            throw new \moodle_exception(
+                'nopermissions', 'error', '', null,
+                'That account may not be enrolled as a learner of this company'
+            );
+        }
 
         $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
         enrol_try_internal_enrol($course->id, $user->id, $studentrole->id);
@@ -74,7 +99,10 @@ class enrol_learner extends external_api {
         global $CFG;
         require_once($CFG->libdir . '/moodlelib.php');
 
-        $ttl = (int) (get_config('local_privacient', 'launchttl') ?: 604800); // 7 days
+        // A launch key is a passwordless login, so its window is kept short.
+        // An explicit launchttl config still wins; the default is one day
+        // rather than the former seven.
+        $ttl = (int) (get_config('local_privacient', 'launchttl') ?: 86400); // 1 day
         return create_user_key('local_privacient', $userid, $courseid, null, time() + $ttl);
     }
 

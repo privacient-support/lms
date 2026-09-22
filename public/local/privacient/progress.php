@@ -38,11 +38,13 @@ if ($watched < $threshold) {
 }
 
 // Wall-clock floor: play.php stamps the start, so a client cannot claim a full
-// watch the moment the page loads.
+// watch the moment the page loads. The stamp is now REQUIRED — a POST with no
+// recorded start never opened the player, so it cannot have watched anything
+// and is rejected rather than allowed through as before.
 $startedkey = 'local_privacient_watchstart_' . $cm->id;
 $started = (int) get_user_preferences($startedkey, 0);
 $minimum = (int) (get_config('local_privacient', 'minwatchseconds') ?: 10);
-if ($started && (time() - $started) < $minimum) {
+if (!$started || (time() - $started) < $minimum) {
     $respond(false, 'too-fast');
 }
 

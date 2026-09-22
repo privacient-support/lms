@@ -27,12 +27,14 @@ class update_content extends external_api {
                 VALUE_DEFAULT,
                 ''
             ),
-            // Library the caller may edit: -1 any, 0 global, >0 that tenant.
-            // Declared last to match the execute() signature (Moodle binds
-            // these positionally).
+            // Library the caller may edit: 0 global, >0 that tenant. A missing
+            // or negative value is rejected, never treated as "any". Declared
+            // last to match the execute() signature (Moodle binds these
+            // positionally).
             'tenantid' => new external_value(
                 PARAM_INT,
-                'Library the caller may edit: -1 any, 0 global, >0 that tenant',
+                'Library the caller may edit: 0 global, >0 that tenant. '
+                    . 'A missing or negative value is rejected, never treated as "any".',
                 VALUE_DEFAULT,
                 -1
             ),
@@ -67,10 +69,11 @@ class update_content extends external_api {
             throw new \moodle_exception('invalidrecord', 'error', '', null, 'No such content item');
         }
 
-        // Ownership check, so a tenant cannot rename or retag the global library
-        // or another tenant's material even if it learns the id — same rule as
-        // delete and set_poster.
-        if ((int) $tenantid >= 0 && (int) $record->tenantid !== (int) $tenantid) {
+        // Ownership check, fail closed — same rule as delete and set_poster. A
+        // missing/negative tenantid is rejected rather than matching every
+        // tenant, so a tenant cannot rename or retag the global library or
+        // another tenant's material even if it learns the id.
+        if ((int) $tenantid < 0 || (int) $record->tenantid !== (int) $tenantid) {
             throw new \moodle_exception(
                 'nopermissions',
                 'error',

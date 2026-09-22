@@ -194,13 +194,21 @@ class saml_sp {
      * tenant's rather than the site-wide defaults.
      */
     public static function bind_from_request(): int {
-        global $CFG, $SESSION;
+        global $CFG, $SESSION, $USER;
 
-        // Cheap guard: this runs from the auth plugin's constructor on every
-        // page, and only our own endpoints can carry a token.
+        // This runs from the auth plugin's constructor on every page. Bind a
+        // company from the request ONLY on the SAML SP endpoints, and ONLY when
+        // there is no session yet. Otherwise a ?company= token on any URL would
+        // silently rebind a logged-in user — a tenant admin, or the site admin
+        // — into another company's IOMAD context. A logged-in user's
+        // currenteditingcompany is never overwritten from the request here.
         $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
-        if (strpos($uri, '/local/privacient/') === false
-            && empty($_GET['company']) && empty($_POST['company'])) {
+        $onspendpoint = strpos($uri, '/local/privacient/sp/') !== false
+            || strpos($uri, '/auth/iomadsaml2/sp/') !== false;
+        if (!$onspendpoint) {
+            return 0;
+        }
+        if (!empty($USER->id) && !isguestuser()) {
             return 0;
         }
 
@@ -230,11 +238,11 @@ class saml_sp {
             \auth_iomadsaml2\admin\iomadsaml2_settings::OPTION_DUAL_LOGIN_NO,
             'auth_iomadsaml2'
         );
-        // Site default is also 1; an admin had turned it off, which blocked
-        // every pre-provisioned learner when ACS had no company in session.
-        if ((string) get_config('auth_iomadsaml2', 'anyauth') === '0') {
-            set_config('anyauth', 1, 'auth_iomadsaml2');
-        }
+        // Only the per-company anyauth_{companyid} is set. The site-wide
+        // anyauth is deliberately NOT forced on: turning it on globally let any
+        // company's IdP authenticate accounts of any auth type site-wide, which
+        // is one half of the cross-tenant login hole. Per-company enablement
+        // plus the membership gate in auth::saml_login_complete is enough.
 
         $userids = $DB->get_fieldset_select(
             'local_iomad_company_users', 'userid', 'companyid = ?', [$companyid]

@@ -148,6 +148,14 @@ $functions = [
     'local_privacient_set_saml_config',
 ];
 
+// IP restriction. The console calls from a known backend, so the token's blast
+// radius shrinks further if this service only answers from that host. Left
+// empty by default so nobody is locked out on first setup; set PRIVACIENT_WS_IP
+// (a comma/space-separated list of IPs or CIDR ranges, e.g. "203.0.113.4" or
+// "10.0.0.0/24") in the environment to pin it. This only sets the allowlist; it
+// never rotates or prints the token.
+$iprestriction = trim((string) getenv('PRIVACIENT_WS_IP'));
+
 $shortname = 'privacient_training';
 $service = $DB->get_record('external_services', ['shortname' => $shortname]);
 if (!$service) {
@@ -158,6 +166,7 @@ if (!$service) {
     $service->restrictedusers = 1;   // only explicitly authorised users
     $service->downloadfiles = 1;
     $service->uploadfiles = 1;
+    $service->iprestriction = $iprestriction;
     $service->timecreated = time();
     $service->id = $DB->insert_record('external_services', $service);
     cli_writeln("service: created {$shortname} (id {$service->id})");
@@ -166,8 +175,16 @@ if (!$service) {
     $service->restrictedusers = 1;
     $service->downloadfiles = 1;
     $service->uploadfiles = 1;
+    // Only touch the allowlist when one was provided, so re-running without the
+    // env var does not silently clear an allowlist set out of band.
+    if ($iprestriction !== '') {
+        $service->iprestriction = $iprestriction;
+    }
     $DB->update_record('external_services', $service);
     cli_writeln("service: reusing {$shortname} (id {$service->id})");
+}
+if ($iprestriction !== '') {
+    cli_writeln("service: IP restriction set to {$iprestriction}");
 }
 
 $added = 0;

@@ -23,6 +23,7 @@ $cmid = required_param('cmid', PARAM_INT);
 require_login($course, false, $cm);
 
 $context = context_module::instance($cm->id);
+require_capability('mod/resource:view', $context);
 $resource = $DB->get_record('resource', ['id' => $cm->instance], '*', MUST_EXIST);
 
 // The playable file: mod_resource keeps one file per activity in `content`.

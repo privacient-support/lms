@@ -391,11 +391,12 @@ class manager {
         if (\core_useragent::is_moodle_app()) {
             // Moodle Mobile app for Android requires SameSite=None to allow embedding content such as H5P and SCORM.
             $sessionoptions['samesite'] = 'None';
-        } else if ($cookiesecure) {
-            // SAML ACS is a cross-site POST from the IdP. Lax cookies are not
-            // sent on that POST, which drops company context and IdP metadata.
-            $sessionoptions['samesite'] = 'None';
         } else {
+            // Moodle's default. The SAML SP cookie that genuinely needs
+            // SameSite=None for the cross-site ACS POST is the SimpleSAMLphp
+            // cookie, set in auth/iomadsaml2/config/config.php — not the core
+            // Moodle session cookie, which stays Lax so it is not sent on
+            // cross-site requests.
             $sessionoptions['samesite'] = 'Lax';
         }
 

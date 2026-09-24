@@ -21,7 +21,7 @@ class add_content extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'draftitemid' => new external_value(PARAM_INT, 'Draft item id from webservice/upload.php'),
-            'kind' => new external_value(PARAM_ALPHA, 'scorm|video|questionnaire|pdf|poster|wallpaper|other'),
+            'kind' => new external_value(PARAM_ALPHA, 'scorm|video|questionnaire|pdf|comic|poster|wallpaper|other'),
             'title' => new external_value(PARAM_TEXT, 'Display title'),
             'description' => new external_value(PARAM_TEXT, 'Description', VALUE_DEFAULT, ''),
             'tags' => new external_value(PARAM_TEXT, 'Comma separated tags', VALUE_DEFAULT, ''),
@@ -54,7 +54,7 @@ class add_content extends external_api {
         self::validate_context($context);
         require_capability('local/privacient:managecontent', $context);
 
-        $allowed = ['scorm', 'video', 'questionnaire', 'pdf', 'poster', 'wallpaper', 'other'];
+        $allowed = ['scorm', 'video', 'questionnaire', 'pdf', 'comic', 'poster', 'wallpaper', 'other'];
         if (!in_array($kind, $allowed, true)) {
             $kind = 'other';
         }

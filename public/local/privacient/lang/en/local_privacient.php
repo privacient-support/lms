@@ -14,6 +14,18 @@ $string['backtotraining'] = 'Back to my training';
 // Shown in the browser tab; keep in step with the portal's title template.
 $string['portaltitle'] = 'Security Training';
 
+// The branded intro slate shown over the player before a video starts.
+$string['cachedef_branding'] = 'Company branding for the video intro slate';
+$string['introkicker'] = 'Training for';
+$string['introstart'] = 'Start video';
+$string['intrologoalt'] = '{$a} logo';
+$string['introstarttraining'] = 'Start training';
+
+// Fast-forward guard in the video player.
+$string['noskipahead'] = 'Skipping ahead is turned off until you have watched this video. You can rewind at any time.';
+$string['nofasterspeed'] = 'This video plays at normal speed until you have watched it through.';
+$string['resumefrom'] = 'Welcome back — picking up where you left off, at {$a}. You can rewind at any time.';
+
 // The questionnaire landing page — our own, in place of mod_quiz's view.php.
 $string['quizbadge'] = 'Questionnaire';
 $string['quizintro'] = 'A short check of what you have taken in. Answer each question, then submit.';

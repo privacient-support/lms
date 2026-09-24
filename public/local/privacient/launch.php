@@ -92,10 +92,11 @@ if ($courseid) {
         // still mod_quiz's job; only the way in belongs to us.
         $target = new moodle_url('/local/privacient/quiz.php', ['cmid' => $item->cmid]);
     } else if ($cmexists && $item->modname === 'scorm') {
-        // mod_scorm's own entry point, which with skipview set drops the
-        // learner straight into player.php — itself an 'embedded' page, so it
-        // carries no Moodle chrome either.
-        $target = new moodle_url('/mod/scorm/view.php', ['id' => $item->cmid]);
+        // Our branded intro first — the learner's company logo — which then
+        // continues to mod_scorm's view.php; with skipview set that drops the
+        // learner straight into player.php, itself an 'embedded' page. With no
+        // branding to show, scorm.php redirects straight through.
+        $target = new moodle_url('/local/privacient/scorm.php', ['cmid' => $item->cmid]);
     } else {
         $target = new moodle_url('/course/view.php', ['id' => $courseid]);
     }

@@ -18,6 +18,16 @@ if ($hassiteconfig) {
         ''
     ));
     $settings->add(new admin_setting_configtext(
+        'local_privacient/brandingurl',
+        'Branding URL (optional)',
+        'Where the video player fetches the learner\'s company logo and colour for the intro '
+            . 'shown before a video, e.g. https://host/frontend/api/internal/training/branding/ '
+            . '(keep the trailing slash). Leave blank to derive it from the progress callback URL. '
+            . 'Signed with the progress callback secret.',
+        '',
+        PARAM_URL
+    ));
+    $settings->add(new admin_setting_configtext(
         'local_privacient/launchttl',
         'Launch link lifetime (seconds)',
         'How long a learner launch link stays valid. Default one week.',
@@ -36,8 +46,11 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configtext(
         'local_privacient/minwatchseconds',
         'Minimum watch time (seconds)',
-        'A completion reported sooner than this after the player opened is rejected. '
-            . 'Stops a client claiming a full watch the instant the page loads.',
+        'A completion is rejected until the learner has spent at least this long actually '
+            . 'playing the video (summed across visits, measured by the server). For MP4 videos '
+            . 'the bar is also raised to the completion threshold\'s share of the video\'s real '
+            . 'running time; this is the floor, and the whole rule for formats whose length '
+            . 'cannot be read (e.g. WebM).',
         10,
         PARAM_INT
     ));

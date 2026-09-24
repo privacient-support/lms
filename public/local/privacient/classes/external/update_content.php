@@ -91,7 +91,7 @@ class update_content extends external_api {
         $record->description = (string) $description;
         $record->tags = (string) $tags;
 
-        $allowed = ['scorm', 'video', 'questionnaire', 'pdf', 'poster', 'wallpaper', 'other'];
+        $allowed = ['scorm', 'video', 'questionnaire', 'pdf', 'comic', 'poster', 'wallpaper', 'other'];
         if ($kind !== '' && in_array($kind, $allowed, true)) {
             $record->kind = $kind;
         }

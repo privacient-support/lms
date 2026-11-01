@@ -92,6 +92,19 @@ class hook_callbacks {
         return self::is_learner();
     }
 
+    /** Launchable SCOs in the SCORM package this page is about, or 0 if it is about none. */
+    private static function scorm_sco_count(): int {
+        global $DB, $PAGE;
+
+        $cm = $PAGE->cm;
+        if (!$cm || $cm->modname !== 'scorm') {
+            return 0;
+        }
+        return $DB->count_records_select(
+            'scorm_scoes', "scorm = ? AND launch <> ''", [(int) $cm->instance]
+        );
+    }
+
     /** Either of the two module types whose own pages a learner sees. */
     private static function is_learner_module_page(): bool {
         return self::is_learner_scorm_page() || self::is_learner_quiz_page();
@@ -121,6 +134,26 @@ class hook_callbacks {
         // page to return to, so it gets no link. The quiz header below still
         // renders — "question 3 of 5" is worth as much in the app as out of it.
         $inapp = \local_privacient\app_client::is_app_request();
+
+        // In a package the height belongs to the package, so the way out is a
+        // close button in the corner rather than a bar across the top. The
+        // portal opens training in the same tab, so closing it means going back
+        // there. (The browser's Back works too, but takes two presses: the
+        // branded intro sits between the portal and the player.)
+        if (self::is_learner_scorm_page()) {
+            if (!$inapp) {
+                $hook->add_html(
+                    '<a class="pv-close" href="' . s($portal) . '" title="' . s($label)
+                    . '" aria-label="' . s($label) . '">'
+                    . '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+                    . '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor"'
+                    . ' stroke-width="2.2" stroke-linecap="round"/></svg>'
+                    . '</a>'
+                );
+            }
+            return;
+        }
+
         $back = $inapp
             ? ''
             : '<a class="pv-back" href="' . s($portal) . '">' . s($label) . '</a>';
@@ -209,6 +242,16 @@ class hook_callbacks {
         // Moodle's own chrome and restyles what is left to match the portal.
         if (self::is_learner_scorm_page()) {
             $hook->add_html(self::scorm_chrome_css());
+            // Moodle's ">" reopens the table of contents we hide. With one SCO
+            // there is nothing in it to go to, so it is only a button taking a
+            // row above the package. With several it stays: hiding the TOC also
+            // hides mod_scorm's prev/next buttons, leaving it the only way
+            // between SCOs.
+            if (self::scorm_sco_count() === 1) {
+                $hook->add_html(
+                    '<style>#page-mod-scorm-player #scorm_toc_toggle { display: none !important; }</style>'
+                );
+            }
         }
         if (self::is_learner_quiz_page()) {
             $hook->add_html(self::quiz_chrome_css());
@@ -234,7 +277,7 @@ class hook_callbacks {
         );
     }
 
-    /** Chrome removal for a learner inside a SCORM package. */
+    /** Chrome removal, and a window-sized player, for a learner inside a SCORM package. */
     private static function scorm_chrome_css(): string {
         return <<<'CSS'
 <style>
@@ -243,19 +286,87 @@ class hook_callbacks {
   #page .d-flex.flex-row-reverse > a.btn-secondary { display: none !important; }
   /* :has keeps the empty flex row from leaving a gap where the button was. */
   #page div.d-flex.flex-row-reverse:has(> a.btn-secondary) { margin: 0 !important; }
-  .pv-back-bar { display: flex; justify-content: flex-end; padding: 8px 12px 0; }
-  .pv-back {
-    display: inline-block; padding: 7px 14px; border: 1px solid #d4d4d8;
-    border-radius: 9px; background: #fff; color: #3f3f46; font-size: .85rem;
-    font-weight: 500; text-decoration: none;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* The way out, injected at the top of the body: a close button in the top
+     right corner. It gets room the package does not draw under. A laptop
+     window is short of height rather than width, so there the room is a
+     narrow column down the right of the player; a phone is short of width, so
+     there it is a strip across the top. None of it in the app, which has no
+     button and closes the player itself. */
+  .pv-close {
+    position: fixed; top: 8px; right: 8px; z-index: 1050;
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid #d4d4d8; background: #fff; color: #3f3f46;
+    box-shadow: 0 1px 4px rgba(24, 24, 27, .1);
   }
-  .pv-back:hover { background: #f4f4f5; color: #18181b; text-decoration: none; }
-  /* Nothing else is hidden here. The table of contents is removed properly by
-     the activity's own `hidetoc` setting, and #tocbox — which sounds like the
-     TOC — actually carries the SCORM API bridge script the package talks to.
-     Hiding it blanked the player entirely. */
+  .pv-close:hover, .pv-close:focus-visible { background: #f4f4f5; color: #18181b; }
+  @media (min-width: 600px) {
+    #page-mod-scorm-player:has(.pv-close) #scorm_object { width: calc(100% - 48px) !important; }
+  }
+  @media (max-width: 599px) {
+    #page-mod-scorm-player:has(.pv-close) #scormpage { padding-top: 48px; }
+  }
+  /* Nothing else is hidden here, bar the TOC toggle of a single-SCO package
+     (before_standard_head_html_generation). The table of contents is removed
+     properly by the activity's own `hidetoc` setting, and #tocbox — which
+     sounds like the TOC — actually carries the SCORM API bridge script the
+     package talks to. Hiding it blanked the player entirely. */
+  /* Fit the player to the window. mod_scorm sizes #scorm_layout to the
+     viewport but never below 680px, leaves 50px of margin under it, and with
+     the TOC hidden its ">" toggle takes a row of its own while the content
+     below it is still 100% of the layout's height. On a laptop-height window
+     the bottom of the package fell below the fold and the learner had to
+     scroll the page to reach it. The script below measures what is left of
+     the window and sets the height; until it has run, mod_scorm's own figure
+     stands. Where the toggle is kept (a package with several SCOs), the fit
+     allows for its row. */
+  #page-mod-scorm-player #scorm_layout { margin-bottom: 0 !important; }
+  html.pv-fit #page-mod-scorm-player #scorm_layout { height: var(--pv-player-h) !important; }
 </style>
+<script>
+(function () {
+  // Below this a package is too cramped to use, and scrolling the page is the
+  // lesser evil.
+  var MIN = 320;
+  var queued = false;
+  function fit() {
+    queued = false;
+    var layout = document.getElementById('scorm_layout');
+    if (!layout) {
+      return;
+    }
+    var root = document.documentElement;
+    var top = layout.getBoundingClientRect().top + window.pageYOffset;
+    var height = Math.max(MIN, Math.floor(window.innerHeight - top));
+    root.style.setProperty('--pv-player-h', height + 'px');
+    root.classList.add('pv-fit');
+    // Whatever still hangs below the window (the toggle row's worth of
+    // content, mostly) comes off the layout, and the content follows it.
+    var over = root.scrollHeight - window.innerHeight;
+    if (over > 0) {
+      root.style.setProperty('--pv-player-h', Math.max(MIN, height - over) + 'px');
+    }
+  }
+  function refit() {
+    if (!queued) {
+      queued = true;
+      window.requestAnimationFrame(fit);
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    fit();
+    // mod_scorm builds the player after this, and opening or closing the TOC
+    // rebuilds it, by changing classes and inserting the package's frame. The
+    // content wrapping under the toggle moves it without resizing anything, so
+    // a ResizeObserver misses it; the changes themselves are what to watch.
+    new MutationObserver(refit).observe(document.body, {
+      subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'],
+    });
+  });
+  window.addEventListener('load', refit);
+  window.addEventListener('resize', refit);
+})();
+</script>
 CSS;
     }
 

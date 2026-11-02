@@ -6,6 +6,79 @@ changed, why, the files touched, and anything that must be run to deploy it.
 
 ---
 
+## 2026-11-01 — SCORM player: a close button instead of the back bar, and no ">" toggle
+
+**Type:** Change
+
+**Why:** The "Back to my training" bar across the top of the SCORM player and
+Moodle's ">" TOC toggle under it each took a row of height from the package,
+and the toggle only reopens a table of contents we deliberately hide.
+
+**What changed** (learner SCORM pages, `hook_callbacks.php`):
+- The bar is gone. In its place a round close (×) button sits in the top
+  right corner and goes to the portal (`portalurl`), which is where the
+  learner came from: the portal opens training in the same tab. Its tooltip
+  and accessible name are the existing "Back to my training" string.
+- The button has room of its own rather than covering the package: on screens
+  600px and wider the package frame is 48px narrower, leaving a column down
+  the right; below 600px the player starts 48px down, leaving a strip across
+  the top. In the app there is no button (the app closes the player itself)
+  and no room is reserved.
+- The ">" toggle is hidden when the package has one launchable SCO (every
+  package so far). It stays for a package with several, because with the TOC
+  hidden mod_scorm also hides its prev/next buttons and the toggle is the only
+  way between SCOs; the window fit allows for its row there.
+- Quiz pages keep their back link and header; the intro slate and the video
+  player keep their "Back to my training" link.
+
+**Files:** `public/local/privacient/classes/hook_callbacks.php`.
+
+**Deploy:** deploy the plugin; no upgrade needed (code-only, no new strings).
+
+**Tested:** headless Chrome as a learner on a published single-SCO package:
+1440×654 and 1280×520 (no bar, no toggle, player from the top of the window,
+page = window, button beside the frame without overlapping it), 390×700 (button
+in the strip above the frame), the app's user agent (no button, no strip),
+and the button lands on the portal.
+
+---
+
+## 2026-11-01 — Fix: SCORM player ran off the bottom of the window
+
+**Type:** Bug fix
+
+**Why:** On a laptop-height window the bottom of a SCORM package was cut off
+and the learner had to scroll the page to see the whole module. Three things in
+core mod_scorm add up: it sizes the player to the viewport but never below
+680px (`mod/scorm/module.js`), puts a 50px margin under it
+(`mod/scorm/styles.css`), and with the TOC hidden (`hidetoc=1`, as we publish)
+its ">" toggle takes a row of its own while the content under it is still 100%
+of the player's height. Measured at 1440×654: a 759px page in a 654px window.
+
+**What changed:** the learner SCORM chrome injected by
+`hook_callbacks::scorm_chrome_css()` now removes that margin and sizes the
+player to exactly the space left in the window: a small script measures it
+and sets the height through a CSS variable, taking off whatever still hangs
+below. It refits on resize, when mod_scorm builds the player, and when the
+TOC is opened or closed (watched with a MutationObserver: the content wrapping
+under the toggle moves it without resizing anything). Below 320px it stops
+shrinking and the page scrolls. Until the script runs, mod_scorm's own height
+stands. Core mod_scorm is untouched, and so is the ">" toggle: with the TOC
+hidden mod_scorm also hides its prev/next buttons, so in a multi-SCO package
+the toggle is the only way between SCOs. Learners only; staff see Moodle's
+player as before. Applies to every existing SCORM activity, no republishing.
+
+**Files:** `public/local/privacient/classes/hook_callbacks.php`.
+
+**Deploy:** deploy the plugin; no upgrade needed (code-only).
+
+**Tested:** headless Chrome as a learner on a published package, 1440×654
+(page 654 = window, was 759), 1440×900 and 1280×520 (page = window, no inner
+scrollers), TOC opened and closed (refits 575px ↔ 608px, no overflow either
+way); the package fills its frame at each size.
+
+---
+
 ## 2026-09-24 — Fix: comics were stored as "Other"
 
 **Type:** Bug fix

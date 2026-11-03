@@ -6,6 +6,45 @@ changed, why, the files touched, and anything that must be run to deploy it.
 
 ---
 
+## 2026-11-03 — Fix: portal SAML sign-in signed in the previous person
+
+**Type:** Bug fix (security)
+
+**Why:** After one learner signed in to the portal with SAML, anyone typing a
+colleague's address on the same browser was signed straight in, with no
+authentication, even after the first learner signed out of the portal. The
+portal sign-out only clears the portal cookie; IOMAD's session (and the
+SimpleSAMLphp and IdP sessions behind it) stayed, and `portal_sso.php` vouched
+for whoever held that session, whatever address had been typed. Both people
+are in one company, so the tenant checks did not catch it.
+
+**What changed:**
+- The portal's start route now sends `hint`: an HMAC (shared callback secret)
+  of the typed address, so the address itself is never in a URL or log.
+- `portal_sso.php` compares the hint with the Moodle user it is about to
+  vouch for. On a mismatch it ends the Moodle session and restarts the
+  hand-off with `ForceAuthn`, so the IdP prompts instead of reusing its
+  session. That happens once per hand-off; a second mismatch goes back to
+  the portal, which refuses it. An admin's "Log in as" session is never
+  vouched for.
+- `auth_iomadsaml2\auth::saml_login()` takes an optional `$forceauthn`. When
+  it is set, it calls SimpleSAMLphp `login()` with `ForceAuthn` rather than
+  `requireAuth()`, which would hand back the cached SP session.
+- `saml_sp::identity_hint()` added; `fail_to_portal()` clears the new session
+  keys.
+- Portal side: the SAML callback refuses any identity that is not the typed
+  address. That is the authoritative check; the LMS change is what lets the
+  right person sign in.
+
+**Files:** `local/privacient/portal_sso.php`,
+`local/privacient/classes/saml_sp.php`, `auth/iomadsaml2/classes/auth.php`.
+
+**Deploy:** no version bump or upgrade. The portal and LMS can ship in either
+order: an old LMS ignores `hint` (the portal still refuses the wrong person),
+and an old portal sends no hint (the LMS behaves as before).
+
+---
+
 ## 2026-11-01 — SCORM player: a close button instead of the back bar, and no ">" toggle
 
 **Type:** Change

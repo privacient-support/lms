@@ -662,7 +662,7 @@ class auth extends \auth_plugin_base {
     /**
      * All the checking happens before the login page in this hook
      */
-    public function saml_login() {
+    public function saml_login(bool $forceauthn = false) {
         global $CFG, $SESSION;
 
         require_once(__DIR__.'/../setup.php');
@@ -717,6 +717,20 @@ class auth extends \auth_plugin_base {
         $params['AllowCreate'] = $this->config->allowcreate == 1;
 
         $auth = new \SimpleSAML\Auth\Simple($this->spname);
+
+        // Privacient: make the IdP authenticate again, now. requireAuth() hands
+        // back a still-valid SP session without contacting the IdP, and the IdP
+        // would otherwise reuse its own session silently, so after one person
+        // signed in on a browser every later sign-in there came back as them.
+        // login() always starts a new AuthnRequest; ForceAuthn makes the IdP
+        // prompt for credentials rather than reuse its session. Never returns.
+        if ($forceauthn) {
+            $params['isPassive'] = false;
+            unset($params['ErrorURL']);
+            $params['ForceAuthn'] = true;
+            $auth->login($params);
+        }
+
         // Redirect to IdP login page for authentication.
         $auth->requireAuth($params);
 

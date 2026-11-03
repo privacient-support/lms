@@ -313,6 +313,9 @@ class saml_sp {
         unset(
             $SESSION->privacient_sso_return,
             $SESSION->privacient_sso_state,
+            $SESSION->privacient_sso_hint,
+            $SESSION->privacient_sso_forceauthn,
+            $SESSION->privacient_sso_forced,
             $SESSION->wantsurl
         );
 
@@ -324,6 +327,19 @@ class saml_sp {
             'error' => 'Your organisation signed you in, but we could not match'
                 . ' you to a training account. Please contact your IT team.',
         ]));
+    }
+
+    /**
+     * Keyed hash of the address a learner typed on the portal's sign-in page.
+     *
+     * The portal sends this with every hand-off so the hand-off page can tell
+     * when the person IOMAD is about to vouch for is not the person who asked
+     * to sign in, and make the IdP authenticate again. Keyed with the shared
+     * callback secret so the address itself never appears in a URL or a log.
+     * Must match `identityHint()` in the portal's start route.
+     */
+    public static function identity_hint(string $email, string $secret): string {
+        return hash_hmac('sha256', 'sso-hint.' . \core_text::strtolower(trim($email)), $secret);
     }
 
     /** Forget a deleted company's token so it can never be resolved again. */

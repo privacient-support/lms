@@ -27,6 +27,12 @@ $company = optional_param('company', '', PARAM_ALPHANUMEXT);
 $legacyid = optional_param('companyid', 0, PARAM_INT);
 $state = optional_param('state', '', PARAM_ALPHANUMEXT);
 $return = optional_param('return', '', PARAM_URL);
+// Keyed hash of the address typed at the portal (see saml_sp::identity_hint).
+$hint = optional_param('hint', '', PARAM_ALPHANUM);
+// Set only by this page, after it has ended a session that belonged to someone
+// other than the person signing in. Anyone else setting it merely gets asked
+// for their password.
+$reauth = optional_param('reauth', 0, PARAM_BOOL);
 
 $companyid = 0;
 if ($company !== '') {
@@ -56,6 +62,19 @@ if ($portal === '' || $secret === '') {
 // holds the absolute callback; the URL only names the tenant and the state.
 if ($return !== '') {
     $SESSION->privacient_sso_return = $return;
+    // A fresh hand-off from the portal: its hint replaces any earlier one, and
+    // whether the IdP has been made to re-authenticate starts over.
+    unset(
+        $SESSION->privacient_sso_hint,
+        $SESSION->privacient_sso_forceauthn,
+        $SESSION->privacient_sso_forced
+    );
+    if ($hint !== '') {
+        $SESSION->privacient_sso_hint = $hint;
+    }
+    if ($reauth && $state !== '') {
+        $SESSION->privacient_sso_forceauthn = $state;
+    }
 }
 if ($state !== '') {
     $SESSION->privacient_sso_state = $state;
@@ -69,6 +88,7 @@ if ($return !== '' || $company === '') {
 
 $state = $state !== '' ? $state : (string) ($SESSION->privacient_sso_state ?? '');
 $return = (string) ($SESSION->privacient_sso_return ?? '');
+$hint = (string) ($SESSION->privacient_sso_hint ?? '');
 if ($return === '') {
     $return = \local_privacient\saml_sp::frontend_callback_url($portal);
 }
@@ -101,10 +121,20 @@ if (!isloggedin() || isguestuser()) {
         'state' => $state,
     ]))->out(false);
 
+    // After a mismatched session was ended below, the IdP must prompt rather
+    // than reuse its own session. Consumed here, and recorded as done for this
+    // hand-off, so the return trip from the IdP signs in normally.
+    $forceauthn = $state !== ''
+        && (string) ($SESSION->privacient_sso_forceauthn ?? '') === $state;
+    if ($forceauthn) {
+        unset($SESSION->privacient_sso_forceauthn);
+        $SESSION->privacient_sso_forced = $state;
+    }
+
     // Straight to SAML rather than Moodle's login form: learners have no
     // Moodle password and the form would be a dead end for them.
     require_once($CFG->dirroot . '/auth/iomadsaml2/setup.php');
-    $iomadsaml2auth->saml_login();
+    $iomadsaml2auth->saml_login($forceauthn);
 }
 
 if (!isloggedin() || isguestuser()) {
@@ -112,6 +142,42 @@ if (!isloggedin() || isguestuser()) {
         'invalidarguments', 'error', '', null,
         'Single sign-on did not produce a Moodle session'
     );
+}
+
+// The session must belong to the person who asked to sign in.
+//
+// IOMAD's session (and the SP and IdP sessions behind it) outlives the
+// portal's sign-out, so this page used to vouch for whoever signed in first on
+// a browser, whatever address was typed next — and the portal signed them in
+// with no authentication at all. On a mismatch, end that session and make the
+// IdP authenticate afresh. Only once per hand-off: if the person then signs in
+// as someone else at the prompt, the portal refuses the result instead of this
+// page looping. An administrator's "Log in as" session was never an IdP
+// sign-in, so it is never vouched for.
+$impersonating = \core\session\manager::is_loggedinas();
+$mismatch = $impersonating || ($hint !== '' && !hash_equals(
+    $hint,
+    \local_privacient\saml_sp::identity_hint((string) $USER->email, $secret)
+));
+if ($mismatch) {
+    if ($state !== '' && (string) ($SESSION->privacient_sso_forced ?? '') !== $state) {
+        // Ending the session discards $SESSION, so the hand-off is carried
+        // through the URL once more and re-stashed by the block at the top.
+        require_logout();
+        redirect(new moodle_url('/local/privacient/portal_sso.php', [
+            'company' => $token,
+            'state' => $state,
+            'return' => $return,
+            'hint' => $hint,
+            'reauth' => 1,
+        ]));
+    }
+    if ($impersonating) {
+        throw new moodle_exception(
+            'invalidarguments', 'error', '', null,
+            'That sign-in was not valid for this organisation'
+        );
+    }
 }
 
 // IOMAD's SAML lookup matches users across the whole site with no company
@@ -128,7 +194,14 @@ if (!$DB->record_exists('local_iomad_company_users', [
     );
 }
 
-unset($SESSION->privacient_sso_return, $SESSION->privacient_sso_state, $SESSION->wantsurl);
+unset(
+    $SESSION->privacient_sso_return,
+    $SESSION->privacient_sso_state,
+    $SESSION->privacient_sso_hint,
+    $SESSION->privacient_sso_forceauthn,
+    $SESSION->privacient_sso_forced,
+    $SESSION->wantsurl
+);
 
 $payload = json_encode([
     'email' => \core_text::strtolower(trim((string) $USER->email)),

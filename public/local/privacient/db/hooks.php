@@ -22,4 +22,11 @@ $callbacks = [
         'callback' => \local_privacient\hook_callbacks::class . '::before_http_headers',
         'priority' => 0,
     ],
+    [
+        // Spots the save that closes a SCORM session, the only point at which
+        // the package's time on task is recorded, so that it can be reported.
+        'hook' => \core\hook\after_config::class,
+        'callback' => \local_privacient\scorm_session::class . '::after_config',
+        'priority' => 0,
+    ],
 ];

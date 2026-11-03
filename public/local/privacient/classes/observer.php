@@ -194,6 +194,53 @@ class observer {
     }
 
     /**
+     * A SCORM session has closed and its time has been stored: report it.
+     *
+     * Called by scorm_session once LMSFinish's save has landed. That is the
+     * only point at which cmi.total_time includes the session just ended;
+     * every earlier event read the total as it stood before this session.
+     *
+     * The status comes from Moodle's completion state, read the same way the
+     * completion observer reads it. A time report therefore claims no progress
+     * that a completion event would not, and since the console keeps a
+     * completion once it has it, a report never moves a finished module back.
+     */
+    public static function scorm_session_closed(int $courseid, int $userid): void {
+        self::queue(
+            $userid,
+            $courseid,
+            self::scorm_status($courseid, $userid),
+            self::score_for($courseid, $userid)
+        );
+    }
+
+    /** 'completed' once the course's SCORM is complete, otherwise 'started'. */
+    public static function scorm_status(int $courseid, int $userid): string {
+        global $CFG;
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $course = get_course($courseid);
+        $completion = new \completion_info($course);
+        if ($completion->is_course_complete($userid)) {
+            return 'completed';
+        }
+
+        $tracked = false;
+        foreach (get_fast_modinfo($course, $userid)->get_instances_of('scorm') as $cm) {
+            if (!$completion->is_enabled($cm)) {
+                continue;
+            }
+            $tracked = true;
+            $state = (int) $completion->get_data($cm, false, $userid)->completionstate;
+            // As in completion_updated(): complete-fail is not finished.
+            if (!in_array($state, [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS], true)) {
+                return 'started';
+            }
+        }
+        return $tracked ? 'completed' : 'started';
+    }
+
+    /**
      * Queue a callback carrying a known time on task.
      *
      * Public so the reconciliation script can hand over what Moodle already

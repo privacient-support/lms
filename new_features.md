@@ -6,6 +6,51 @@ changed, why, the files touched, and anything that must be run to deploy it.
 
 ---
 
+## 2026-11-03 — Fix: SCORM time spent missing or short in training results
+
+**Type:** Bug fix
+
+**Why:** A learner who finished a SCORM module in one sitting showed no time
+spent in the campaign results. One who left part-way and came back showed only
+the first sitting. A package reports its time once per session, when it exits
+(`LMSFinish` sends `session_time`, and mod_scorm stores the new
+`cmi.core.total_time` / `cmi.total_time` in that same save). Moodle fires no
+event for that save. Every event the plugin reported on (the SCO opening,
+completion changing) happens while the session is still open, so the time it
+read was the total before that session. Locally, course 10 had 427s stored in
+Moodle and 201s in the console. Completion was saved at 05:28:56 and the
+total time at 05:28:59.
+
+**What changed:**
+- New `classes/scorm_session.php`, registered on `\core\hook\after_config`.
+  For a `/mod/scorm/datamodel.php` request that posts a total time (only
+  `LMSFinish` and its unload beacon do), it registers a shutdown function.
+  After the save, that function checks that a new total was stored for the
+  signed-in learner and calls `observer::scorm_session_closed()`. The time is
+  read from Moodle's tables, never from the request. A session that added no
+  time sends nothing.
+- `observer::scorm_session_closed()` queues the usual progress callback, using
+  Moodle's completion state for the status (`scorm_status()`). The console
+  never moves a completed module back, and it only ever raises a stored time.
+- A learner who leaves early now has their time reported as soon as they
+  leave, not the next time they open the module.
+- New `scripts/privacient-scorm-time-backfill.php` re-sends the stored totals
+  for learners affected before this fix. It does a dry run by default; pass
+  `--run` to queue the reports.
+
+**Files:** `local/privacient/classes/scorm_session.php` (new),
+`local/privacient/classes/observer.php`, `local/privacient/db/hooks.php`,
+`local/privacient/version.php` (2026092403, 1.23.1),
+`scripts/privacient-scorm-time-backfill.php` (new).
+
+**Deploy:** version bump, so run the CLI upgrade (`php admin/cli/upgrade.php
+--non-interactive`) so Moodle registers the new hook. The console needs no
+change. To correct past results, run the backfill dry run, review it, then run
+it with `--run`. A learner whom Moodle shows as complete but the console does
+not will be completed by the backfill, and their completion email sent.
+
+---
+
 ## 2026-11-03 — Fix: portal SAML sign-in signed in the previous person
 
 **Type:** Bug fix (security)
